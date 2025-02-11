@@ -17,7 +17,6 @@ class StrokeDetector:
         self.last_stroke_time = 0
         self.was_touching = False  # Track previous touch state
         self.pending_stroke = None  # Store detected stroke until next touch
-        self.touch_start_time = None  # Track when the current touch started
         
     def add_point(self, value, is_touching):
         """Add a touch point to history and check for stroke on release
@@ -38,12 +37,9 @@ class StrokeDetector:
                 if len(self.touch_history) >= config.MIN_STROKE_POINTS:
                     self.pending_stroke = self._check_stroke()
             else:  # New touch started
-                self.touch_start_time = now
+                self.touch_history = []  # Clear history only on new touch
                 self.pending_stroke = None
             
-            # Only clear history when starting a new touch
-            if is_touching:
-                self.touch_history = []
             self.was_touching = is_touching
             
             # Return pending stroke detection if finger was just lifted
@@ -59,11 +55,12 @@ class StrokeDetector:
             
         # Convert value to normalized position (0 to 1)
         position = ((value - config.LEFT_MIN) / (config.RIGHT_MAX - config.LEFT_MIN))
-        logging.debug(f"Normalized position: {position:.3f} from value: {value}")
         position = max(0, min(position, 1.0))  # Clamp to valid range
         
-        # Add point with timestamp
-        self.touch_history.append((now, position))
+        # Only add non-zero positions to history
+        if position > 0:
+            self.touch_history.append((now, position))
+            logging.debug(f"Added position: {position:.3f} from value: {value}")
         
         return False, None
     
@@ -73,24 +70,18 @@ class StrokeDetector:
         Returns:
             tuple: (bool: stroke detected, str: stroke direction if detected)
         """
-        # Keep history in chronological order (should already be since we append in order)
-        history = list(self.touch_history)  # Make a copy to avoid modifying original
-        times = []
-        positions = []
-        for t, p in history:
-            if p > 0:  # Only keep non-zero positions
-                times.append(t)
-                positions.append(p)
+        if not self.touch_history:  # Safety check
+            return False, None
             
-        # Log raw positions for debugging
-        logging.info(f"Raw positions: {[f'{p:.3f}' for p in positions]}")
+        # History is already chronological and filtered for non-zero positions
+        times = [t for t, p in self.touch_history]
+        positions = [p for t, p in self.touch_history]
         
         # Trim inconsistent readings at the end (lift-off artifacts)
         original_len = len(positions)
         if len(positions) >= 3:
             # Look for sudden direction changes or large jumps at the end
-            for i in range(len(positions)-2, max(0, len(positions)-10), -1):  # Only check last 10 points
-                # Calculate differences between consecutive points
+            for i in range(len(positions)-2, max(0, len(positions)-10), -1):
                 diff1 = positions[i] - positions[i-1]  # Direction of movement
                 diff2 = positions[i+1] - positions[i]  # Direction of next movement
                 
@@ -108,20 +99,17 @@ class StrokeDetector:
             logging.info(f"Not enough points for stroke: {len(positions)} < {config.MIN_STROKE_POINTS}")
             return False, None
             
-        # Calculate total distance and time
+        # Calculate stroke metrics
         total_distance = abs(positions[-1] - positions[0])
-        logging.info(f"First position: {positions[0]:.3f}, Last position: {positions[-1]:.3f}, Distance: {total_distance:.3f}")
         total_time = times[-1] - times[0]
         
-        if total_time == 0:  # Avoid division by zero
+        if total_time == 0:
             logging.info("Zero time duration for stroke")
             return False, None
             
-        # Calculate speed in position units per second
         speed = total_distance / total_time
-        
-        # Determine dominant direction using regression
         direction = self.calculate_stroke_direction(positions)
+        
         if not direction:
             logging.info("Could not determine stroke direction")
             return False, None
@@ -129,24 +117,21 @@ class StrokeDetector:
         # Check if motion is mostly monotonic in the determined direction
         is_monotonic = self.is_mostly_monotonic(positions, direction)
         
-        # Log stroke detection criteria
-        logging.info(f"Stroke check - Distance: {total_distance:.3f}, Speed: {speed:.3f}, Direction: {direction}, Monotonic: {is_monotonic}")
+        # Log all stroke metrics at once
+        logging.info(f"Stroke metrics - Distance: {total_distance:.3f}, Speed: {speed:.3f}, Direction: {direction}, Monotonic: {is_monotonic}")
+        logging.info(f"Positions from {positions[0]:.3f} to {positions[-1]:.3f} over {total_time:.3f}s")
         
-        # Check if stroke criteria are met and enough time has passed since last stroke
+        # Check if stroke criteria are met
         now = time.time()
-        if not (total_distance >= config.MIN_STROKE_DISTANCE):
+        if total_distance < config.MIN_STROKE_DISTANCE:
             logging.info(f"Distance too small: {total_distance:.3f} < {config.MIN_STROKE_DISTANCE}")
-        if not is_monotonic:
+        elif not is_monotonic:
             logging.info("Movement not monotonic enough")
-        if not (speed >= config.MIN_STROKE_SPEED):
+        elif speed < config.MIN_STROKE_SPEED:
             logging.info(f"Speed too low: {speed:.3f} < {config.MIN_STROKE_SPEED}")
-        if not (now - self.last_stroke_time >= config.STROKE_TIME_WINDOW):
+        elif now - self.last_stroke_time < config.STROKE_TIME_WINDOW:
             logging.info(f"Too soon after last stroke: {now - self.last_stroke_time:.3f}s < {config.STROKE_TIME_WINDOW}s")
-            
-        if (total_distance >= config.MIN_STROKE_DISTANCE and 
-            is_monotonic and 
-            speed >= config.MIN_STROKE_SPEED and
-            now - self.last_stroke_time >= config.STROKE_TIME_WINDOW):
+        else:
             self.last_stroke_time = now
             return True, direction
             
