@@ -210,7 +210,7 @@ class TouchState:
             bool: True if touching, False if not
         """
         # Check if value has changed significantly from last reading
-        if abs(value - self.last_value) < config.NOISE_WINDOW and value < config.NO_TOUCH_THRESHOLD:
+        if value < config.NO_TOUCH_THRESHOLD:
             self.stable_count += 1
         else:
             self.stable_count = 0
@@ -223,7 +223,7 @@ class TouchState:
                 self.is_touching = True
                 self.stable_count = 0
         else:
-            if value < config.NO_TOUCH_THRESHOLD and self.stable_count >= 3:
+            if value < config.NO_TOUCH_THRESHOLD and self.stable_count >= 2:
                 self.is_touching = False
                 self.stable_count = 0
         
