@@ -79,12 +79,12 @@ def main():
         logging.info("Reading sensor data...")
         
         while True:
-            voltage, raw = read_sensor(chan)
+            voltage, value = read_sensor(chan)
             
             if voltage is not None:
-                logging.info(f"Voltage: {voltage:.6f} V, Raw: {raw}")
+                logging.info(f"Voltage: {voltage:.6f} V, Value: {value}")
             
-            time.sleep(1)  # Adjust sampling rate as needed
+            time.sleep(0.01)  # Adjust sampling rate as needed
             
     except KeyboardInterrupt:
         logging.info("Test stopped by user")
