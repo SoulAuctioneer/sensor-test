@@ -41,7 +41,9 @@ class StrokeDetector:
                 self.touch_start_time = now
                 self.pending_stroke = None
             
-            self.touch_history = []
+            # Only clear history when starting a new touch
+            if is_touching:
+                self.touch_history = []
             self.was_touching = is_touching
             
             # Return pending stroke detection if finger was just lifted
