@@ -34,8 +34,8 @@ logging.basicConfig(
 )
 
 # Softpot calibration values
-LEFT_MAX = 17625   # Maximum value (far left)
-RIGHT_MIN = 6000   # Minimum value (far right)
+LEFT_MAX = 17000   # Maximum value (far left)
+RIGHT_MIN = 8800   # Minimum value (far right)
 POSITION_WIDTH = 40  # Width of the visual indicator in characters
 
 # Touch detection thresholds
