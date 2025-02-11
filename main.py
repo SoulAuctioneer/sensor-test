@@ -73,7 +73,7 @@ def main():
         ads, chan = setup_adc()
         
         # Set the gain (optional, default is 1)
-        ads.gain = 4
+        ads.gain = 2
         
         logging.info("ADC initialized successfully")
         logging.info("Reading sensor data...")
