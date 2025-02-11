@@ -55,13 +55,14 @@ class Display:
         self.stroke_message = None
         self.stroke_message_time = 0
         self.current_position_display = None  # Store current position display
+        self.intensity_level = 0.0
         
     def update_touch(self, is_touching):
         """Handle touch state changes"""
         self.is_touching = is_touching
         if not is_touching:
             self.current_position_display = None
-            self.show_display(f"[{'─' * config.POSITION_WIDTH}] (no touch)")
+            self.show_display(f"[{'─' * config.POSITION_WIDTH}] (no touch) {self._get_intensity_display()}")
             logging.info("No touch detected")
     
     def update_position(self, position):
@@ -71,6 +72,7 @@ class Display:
             display = self.current_position_display
             if self.stroke_message:
                 display = f"{display} {self.stroke_message}"
+            display = f"{display} {self._get_intensity_display()}"
             self.show_display(display)
     
     def update_stroke(self, direction):
@@ -79,9 +81,28 @@ class Display:
         logging.info(f"Stroke detected: {direction}")
         # Show stroke message immediately with last known position display
         if self.current_position_display:
-            self.show_display(f"{self.current_position_display} {self.stroke_message}")
+            self.show_display(f"{self.current_position_display} {self.stroke_message} {self._get_intensity_display()}")
         else:
-            self.show_display(f"[{'─' * config.POSITION_WIDTH}] {self.stroke_message}")
+            self.show_display(f"[{'─' * config.POSITION_WIDTH}] {self.stroke_message} {self._get_intensity_display()}")
+    
+    def update_intensity(self, level):
+        """Handle intensity level updates"""
+        self.intensity_level = level
+        # Update display with new intensity level
+        if self.current_position_display:
+            display = self.current_position_display
+            if self.stroke_message:
+                display = f"{display} {self.stroke_message}"
+            display = f"{display} {self._get_intensity_display()}"
+            self.show_display(display)
+        else:
+            self.show_display(f"[{'─' * config.POSITION_WIDTH}] (no touch) {self._get_intensity_display()}")
+    
+    def _get_intensity_display(self):
+        """Get visual representation of intensity level"""
+        meter_width = 10  # Width of intensity meter
+        filled = int(self.intensity_level * meter_width)
+        return f"Intensity: [{('█' * filled) + ('░' * (meter_width - filled))}]"
     
     def show_display(self, display):
         """Update the terminal display if changed"""
@@ -104,6 +125,7 @@ async def main():
         sensor.on_touch(display.update_touch)
         sensor.on_position(display.update_position)
         sensor.on_stroke(display.update_stroke)
+        sensor.on_intensity(display.update_intensity)
         
         # Start the sensor and wait for Ctrl+C
         await sensor.start()

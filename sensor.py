@@ -244,6 +244,11 @@ class TouchSensor:
         self.position_callbacks: List[Callable[[float], None]] = []
         self.stroke_callbacks: List[Callable[[str], None]] = []
         self.touch_callbacks: List[Callable[[bool], None]] = []
+        self.intensity_callbacks: List[Callable[[float], None]] = []
+        
+        # Intensity level tracking
+        self.intensity_level = 0.0  # 0.0 to 1.0
+        self.last_intensity_update = time.time()
         
     def _setup_adc(self):
         """Initialize the ADC connection
@@ -292,6 +297,46 @@ class TouchSensor:
         """
         self.touch_callbacks.append(callback)
         
+    def on_intensity(self, callback: Callable[[float], None]):
+        """Register callback for intensity level updates
+        
+        Args:
+            callback: Function taking intensity level (0-1) as argument
+        """
+        self.intensity_callbacks.append(callback)
+        
+    def _update_intensity_level(self):
+        """Update intensity level based on time decay"""
+        now = time.time()
+        elapsed = now - self.last_intensity_update
+        
+        # Apply time-based decay
+        decay = config.INTENSITY_DECAY_RATE * elapsed
+        self.intensity_level = max(0.0, self.intensity_level - decay)
+        
+        self.last_intensity_update = now
+        
+        # Notify callbacks of new intensity level
+        for callback in self.intensity_callbacks:
+            callback(self.intensity_level)
+    
+    def _calculate_intensity_increase(self, distance: float, speed: float) -> float:
+        """Calculate intensity increase based on stroke metrics
+        
+        Args:
+            distance: Total distance of stroke (0-1 range)
+            speed: Speed of stroke (positions per second)
+            
+        Returns:
+            float: Amount to increase intensity (0-1 range)
+        """
+        # Increase is proportional to distance and inversely proportional to speed
+        # Add a small constant (0.1) to speed to prevent division by very small numbers
+        increase = (distance * config.INTENSITY_DISTANCE_FACTOR) / ((speed * config.INTENSITY_SPEED_FACTOR) + 0.1)
+        
+        # Clamp the increase to a reasonable range (0-0.5)
+        return min(0.5, max(0.0, increase))
+    
     async def start(self, sample_rate_hz: float = config.SAMPLE_RATE_HZ):
         """Start the sensor reading loop
         
@@ -311,6 +356,9 @@ class TouchSensor:
                     was_touching = self.touch_state.is_touching
                     is_touching = self.touch_state.update(value)
                     
+                    # Update intensity level
+                    self._update_intensity_level()
+                    
                     # Notify touch state changes
                     if is_touching != was_touching:
                         for callback in self.touch_callbacks:
@@ -329,6 +377,21 @@ class TouchSensor:
                             callback(position)
                     
                     if stroke_detected:
+                        # Get stroke metrics from detector
+                        times = [t for t, p in self.stroke_detector.touch_history]
+                        positions = [p for t, p in self.stroke_detector.touch_history]
+                        total_distance = abs(positions[-1] - positions[0])
+                        total_time = times[-1] - times[0]
+                        speed = total_distance / total_time if total_time > 0 else 0
+                        
+                        # Calculate and apply intensity increase based on stroke metrics
+                        increase = self._calculate_intensity_increase(total_distance, speed)
+                        self.intensity_level = min(1.0, self.intensity_level + increase)
+                        self._update_intensity_level()
+                        
+                        # Log the intensity calculation
+                        logging.info(f"Intensity increase: {increase:.3f} (distance: {total_distance:.3f}, speed: {speed:.3f})")
+                        
                         # Notify stroke detection
                         for callback in self.stroke_callbacks:
                             callback(direction)

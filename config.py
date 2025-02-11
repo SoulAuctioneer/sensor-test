@@ -18,6 +18,11 @@ MIN_STROKE_POINTS = 5        # Minimum number of touch points to consider a stro
 MIN_STROKE_SPEED = 0.25      # Minimum speed (position units per second)
 DIRECTION_REVERSAL_TOLERANCE = 0.05  # Tolerance for small direction reversals
 
+# Intensity tracking parameters
+INTENSITY_DECAY_RATE = 0.2   # Level lost per second
+INTENSITY_SPEED_FACTOR = 2.0  # Higher speeds reduce intensity gain (divisor)
+INTENSITY_DISTANCE_FACTOR = 1.0  # Multiplier for distance contribution
+
 # Sampling configuration
 SAMPLE_RATE_HZ = 100  # Default sampling rate in Hz
 
