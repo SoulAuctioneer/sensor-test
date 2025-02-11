@@ -55,23 +55,40 @@ class StrokeDetector:
         self.touch_history = []  # List of (timestamp, position) tuples
         self.last_stroke_time = 0
         self.was_touching = False  # Track previous touch state
+        self.pending_stroke = None  # Store detected stroke until next touch
         
     def add_point(self, value, is_touching):
-        """Add a touch point to history
+        """Add a touch point to history and check for stroke on release
         
         Args:
             value (int): Raw sensor value
             is_touching (bool): Current touch state
+            
+        Returns:
+            tuple: (bool: stroke detected, str: stroke direction if detected) or (False, None)
         """
-        # Clear history if touch state changed
+        # Handle touch state transition
         if is_touching != self.was_touching:
+            if self.was_touching and not is_touching:  # Finger lifted
+                # Check for stroke only when finger is lifted
+                if len(self.touch_history) >= MIN_STROKE_POINTS:
+                    self.pending_stroke = self._check_stroke()
+            else:  # New touch started
+                self.pending_stroke = None
+            
             self.touch_history = []
             self.was_touching = is_touching
-            return
+            
+            # Return pending stroke detection if finger was just lifted
+            if self.pending_stroke:
+                result = self.pending_stroke
+                self.pending_stroke = None
+                return result
+            return False, None
             
         # Only add points while touching
         if not is_touching:
-            return
+            return False, None
             
         # Convert value to normalized position (0 to 1)
         position = 1.0 - ((value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN))
@@ -84,6 +101,48 @@ class StrokeDetector:
         # Remove old points outside time window
         cutoff_time = now - STROKE_TIME_WINDOW
         self.touch_history = [(t, p) for t, p in self.touch_history if t >= cutoff_time]
+        
+        return False, None
+    
+    def _check_stroke(self):
+        """Internal method to check if the completed touch was a stroke
+        
+        Returns:
+            tuple: (bool: stroke detected, str: stroke direction if detected)
+        """
+        # Get positions and times in chronological order
+        sorted_history = sorted(self.touch_history)
+        times = [t for t, _ in sorted_history]
+        positions = [p for _, p in sorted_history]
+        
+        # Calculate total distance and time
+        total_distance = abs(positions[-1] - positions[0])
+        total_time = times[-1] - times[0]
+        
+        if total_time == 0:  # Avoid division by zero
+            return False, None
+            
+        # Calculate speed in position units per second
+        speed = total_distance / total_time
+        
+        # Determine dominant direction using regression
+        direction = self.calculate_stroke_direction(positions)
+        if not direction:
+            return False, None
+            
+        # Check if motion is mostly monotonic in the determined direction
+        is_monotonic = self.is_mostly_monotonic(positions, direction)
+        
+        # Check if stroke criteria are met
+        now = time.time()
+        if (total_distance >= MIN_STROKE_DISTANCE and 
+            is_monotonic and 
+            speed >= MIN_STROKE_SPEED and
+            now - self.last_stroke_time >= STROKE_TIME_WINDOW):
+            self.last_stroke_time = now
+            return True, direction
+            
+        return False, None
     
     def calculate_stroke_direction(self, positions):
         """Calculate the dominant direction of movement using linear regression
@@ -136,49 +195,6 @@ class StrokeDetector:
         
         # Allow some reversals but ensure overall motion is in correct direction
         return reversals <= len(positions) // 4
-    
-    def detect_stroke(self):
-        """Detect if a stroking motion occurred in the recent touch history
-        
-        Returns:
-            tuple: (bool: stroke detected, str: stroke direction if detected)
-        """
-        if len(self.touch_history) < MIN_STROKE_POINTS:
-            return False, None
-            
-        # Get positions and times in chronological order
-        sorted_history = sorted(self.touch_history)
-        times = [t for t, _ in sorted_history]
-        positions = [p for _, p in sorted_history]
-        
-        # Calculate total distance and time
-        total_distance = abs(positions[-1] - positions[0])
-        total_time = times[-1] - times[0]
-        
-        if total_time == 0:  # Avoid division by zero
-            return False, None
-            
-        # Calculate speed in position units per second
-        speed = total_distance / total_time
-        
-        # Determine dominant direction using regression
-        direction = self.calculate_stroke_direction(positions)
-        if not direction:
-            return False, None
-            
-        # Check if motion is mostly monotonic in the determined direction
-        is_monotonic = self.is_mostly_monotonic(positions, direction)
-        
-        # Check if stroke criteria are met
-        now = time.time()
-        if (total_distance >= MIN_STROKE_DISTANCE and 
-            is_monotonic and 
-            speed >= MIN_STROKE_SPEED and
-            now - self.last_stroke_time >= STROKE_TIME_WINDOW):
-            self.last_stroke_time = now
-            return True, direction
-            
-        return False, None
 
 class TouchState:
     """Class to track touch state with hysteresis"""
@@ -305,13 +321,11 @@ def main():
             if voltage is not None:
                 display, is_touching = get_position_indicator(value, touch_state)
                 
-                # Update stroke detection if touching
-                stroke_detector.add_point(value, is_touching)
-                if is_touching:
-                    stroke_detected, direction = stroke_detector.detect_stroke()
-                    if stroke_detected:
-                        logging.info(f"Stroke detected: {direction}")
-                        display = f"{display} Stroke: {direction}!"
+                # Update stroke detection and check for strokes
+                stroke_detected, direction = stroke_detector.add_point(value, is_touching)
+                if stroke_detected:
+                    logging.info(f"Stroke detected: {direction}")
+                    display = f"{display} Stroke: {direction}!"
                 
                 # Only update display if position changed
                 if display != last_display:
