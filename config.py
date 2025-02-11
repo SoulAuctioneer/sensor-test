@@ -18,6 +18,9 @@ MIN_STROKE_POINTS = 5        # Minimum number of touch points to consider a stro
 MIN_STROKE_SPEED = 0.25      # Minimum speed (position units per second)
 DIRECTION_REVERSAL_TOLERANCE = 0.05  # Tolerance for small direction reversals
 
+# Sampling configuration
+SAMPLE_RATE_HZ = 100  # Default sampling rate in Hz
+
 # Logging configuration
 LOG_FORMAT = '%(asctime)s - %(message)s'
 LOG_FILE = 'sensor_readings.log' 

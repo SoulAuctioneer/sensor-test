@@ -7,7 +7,7 @@ and displays a visual indicator of touch position.
 """
 
 import sys
-import time
+import asyncio
 import logging
 import config
 from sensor import TouchSensor
@@ -28,28 +28,16 @@ logging.basicConfig(
     ]
 )
 
-def get_position_indicator(value, is_touching):
-    """Convert sensor value to a visual position indicator
+def get_position_indicator(position):
+    """Convert normalized position to a visual indicator
     
     Args:
-        value (int): Raw sensor value
-        is_touching (bool): Current touch state
+        position (float): Normalized position (0-1)
         
     Returns:
-        str: ASCII visualization of touch position
+        str: ASCII visualization of position
     """
-    # Only show position if actually touching and value is in valid range
-    if not is_touching or value < config.NO_TOUCH_THRESHOLD or (value > config.NO_TOUCH_THRESHOLD and value < config.LEFT_MIN):
-        return f"[{'─' * config.POSITION_WIDTH}] (no touch)"
-    
-    # Handle values outside calibrated range but still indicating touch
-    if value > config.RIGHT_MAX:
-        value = config.RIGHT_MAX
-    
-    # Calculate position as percentage (0 to 1) where 0 is left and 1 is right
-    position = ((value - config.LEFT_MIN) / (config.RIGHT_MAX - config.LEFT_MIN))
-    
-    # Convert to position in the display width (ensure within bounds)
+    # Convert to position in the display width
     pos = int(position * (config.POSITION_WIDTH - 1))  # Subtract 1 since positions are 0-based
     pos = max(0, min(pos, config.POSITION_WIDTH - 1))  # Clamp to valid range
     
@@ -59,45 +47,66 @@ def get_position_indicator(value, is_touching):
     
     return f"[{''.join(indicator)}]"
 
-def main():
-    """Main function to continuously read and display touch position"""
+class Display:
+    """Class to manage the terminal display"""
+    def __init__(self):
+        self.last_display = ""
+        self.is_touching = False
+        self.stroke_message = None
+        self.stroke_message_time = 0
+        
+    def update_touch(self, is_touching):
+        """Handle touch state changes"""
+        self.is_touching = is_touching
+        if not is_touching:
+            self.show_display(f"[{'─' * config.POSITION_WIDTH}] (no touch)")
+            logging.info("No touch detected")
+    
+    def update_position(self, position):
+        """Handle position updates"""
+        if self.is_touching:
+            display = get_position_indicator(position)
+            if self.stroke_message:
+                display = f"{display} {self.stroke_message}"
+            self.show_display(display)
+            logging.info(f"Position: {position:.3f}")
+    
+    def update_stroke(self, direction):
+        """Handle stroke detection"""
+        self.stroke_message = f"Stroke: {direction}!"
+        logging.info(f"Stroke detected: {direction}")
+    
+    def show_display(self, display):
+        """Update the terminal display if changed"""
+        if display != self.last_display:
+            print(f"\r{display}", end='', flush=True)
+            self.last_display = display
+
+async def main():
+    """Main async function to run the sensor interface"""
     print("\nLinear Softpot Touch Sensor")
     print("Left" + " " * (config.POSITION_WIDTH - 2) + "Right")
+    print("\nTouch the sensor to see position...\n")
     
     try:
         sensor = TouchSensor()
-        logging.info("ADC initialized successfully")
-        print("\nTouch the sensor to see position...\n")
+        display = Display()
         
-        last_display = ""
+        # Register callbacks
+        sensor.on_touch(display.update_touch)
+        sensor.on_position(display.update_position)
+        sensor.on_stroke(display.update_stroke)
         
-        while True:
-            value, is_touching, stroke_detected, direction = sensor.read()
-            
-            if value is not None:
-                display = get_position_indicator(value, is_touching)
-                
-                if stroke_detected:
-                    logging.info(f"Stroke detected: {direction}")
-                    display = f"{display} Stroke: {direction}!"
-                
-                # Only update display if position changed
-                if display != last_display:
-                    print(f"\r{display}", end='', flush=True)
-                    last_display = display
-                    # Log position only if actually touching and in valid range
-                    if is_touching and value >= config.LEFT_MIN:
-                        logging.info(f"Position: {value}")
-                    else:
-                        logging.info("No touch detected")
-            
-            time.sleep(0.01)  # Adjust sampling rate as needed
-            
+        # Start the sensor and wait for Ctrl+C
+        await sensor.start()
+        
     except KeyboardInterrupt:
         print("\nTest stopped by user")
         logging.info("Test stopped by user")
+        sensor.stop()
     except Exception as e:
         logging.error(f"Unexpected error: {str(e)}")
+        sensor.stop()
 
 if __name__ == "__main__":
-    main() 
+    asyncio.run(main()) 

@@ -9,6 +9,8 @@ import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
 import logging
 import config
+import asyncio
+from typing import Callable, Optional, List
 
 class StrokeDetector:
     """Class to detect stroking motions on the touch sensor"""
@@ -238,6 +240,10 @@ class TouchSensor:
         self.ads, self.chan = self._setup_adc()
         self.touch_state = TouchState()
         self.stroke_detector = StrokeDetector()
+        self.running = False
+        self.position_callbacks: List[Callable[[float], None]] = []
+        self.stroke_callbacks: List[Callable[[str], None]] = []
+        self.touch_callbacks: List[Callable[[bool], None]] = []
         
     def _setup_adc(self):
         """Initialize the ADC connection
@@ -262,17 +268,75 @@ class TouchSensor:
             logging.error(f"Failed to initialize ADC: {str(e)}")
             raise
             
-    def read(self):
-        """Read and process the current sensor state
+    def on_position(self, callback: Callable[[float], None]):
+        """Register callback for position updates
         
-        Returns:
-            tuple: (value, is_touching, stroke_detected, stroke_direction)
+        Args:
+            callback: Function taking normalized position (0-1) as argument
         """
-        try:
-            value = self.chan.value
-            is_touching = self.touch_state.update(value)
-            stroke_detected, direction = self.stroke_detector.add_point(value, is_touching)
-            return value, is_touching, stroke_detected, direction
-        except Exception as e:
-            logging.error(f"Error reading sensor: {str(e)}")
-            return None, False, False, None 
+        self.position_callbacks.append(callback)
+        
+    def on_stroke(self, callback: Callable[[str], None]):
+        """Register callback for stroke detection
+        
+        Args:
+            callback: Function taking stroke direction ("left" or "right") as argument
+        """
+        self.stroke_callbacks.append(callback)
+        
+    def on_touch(self, callback: Callable[[bool], None]):
+        """Register callback for touch state changes
+        
+        Args:
+            callback: Function taking touch state (True/False) as argument
+        """
+        self.touch_callbacks.append(callback)
+        
+    async def start(self, sample_rate_hz: float = config.SAMPLE_RATE_HZ):
+        """Start the sensor reading loop
+        
+        Args:
+            sample_rate_hz: Sampling rate in Hz (defaults to config.SAMPLE_RATE_HZ)
+        """
+        if self.running:
+            return
+            
+        self.running = True
+        interval = 1.0 / sample_rate_hz
+        
+        while self.running:
+            try:
+                value = self.chan.value
+                was_touching = self.touch_state.is_touching
+                is_touching = self.touch_state.update(value)
+                
+                # Notify touch state changes
+                if is_touching != was_touching:
+                    for callback in self.touch_callbacks:
+                        callback(is_touching)
+                
+                # Process point and check for strokes
+                stroke_detected, direction = self.stroke_detector.add_point(value, is_touching)
+                
+                if is_touching:
+                    # Calculate normalized position
+                    position = ((value - config.LEFT_MIN) / (config.RIGHT_MAX - config.LEFT_MIN))
+                    position = max(0, min(position, 1.0))
+                    
+                    # Notify position updates
+                    for callback in self.position_callbacks:
+                        callback(position)
+                
+                if stroke_detected:
+                    # Notify stroke detection
+                    for callback in self.stroke_callbacks:
+                        callback(direction)
+                
+            except Exception as e:
+                logging.error(f"Error reading sensor: {str(e)}")
+            
+            await asyncio.sleep(interval)
+    
+    def stop(self):
+        """Stop the sensor reading loop"""
+        self.running = False 
