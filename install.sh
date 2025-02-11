@@ -29,8 +29,7 @@ echo "Installing Python dependencies..."
 source .venv/bin/activate
 if [ "$VIRTUAL_ENV" != "" ]; then
     pip install --upgrade pip
-    pip install adafruit-blinka
-    pip install adafruit-circuitpython-ads1x15
+    pip install -r requirements.txt
 else
     echo "Error: Virtual environment activation failed"
     exit 1
