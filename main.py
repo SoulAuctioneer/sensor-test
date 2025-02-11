@@ -44,7 +44,7 @@ NOISE_WINDOW = 50        # Ignore value changes smaller than this when not touch
 
 # Stroke detection parameters
 STROKE_TIME_WINDOW = 0.5     # Time window to detect stroke (seconds)
-MIN_STROKE_DISTANCE = 0.3    # Minimum distance (as percentage) to consider a stroke
+MIN_STROKE_DISTANCE = 0.25   # Minimum distance (as percentage) to consider a stroke
 MIN_STROKE_POINTS = 5        # Minimum number of touch points to consider a stroke
 MIN_STROKE_SPEED = 0.5       # Minimum speed (position units per second)
 DIRECTION_REVERSAL_TOLERANCE = 0.05  # Tolerance for small direction reversals
@@ -115,6 +115,7 @@ class StrokeDetector:
         positions = [p for _, p in sorted_history]
         
         # Trim inconsistent readings at the end (lift-off artifacts)
+        original_len = len(positions)
         if len(positions) >= 3:
             # Look for sudden direction changes or large jumps at the end
             for i in range(len(positions)-2, 0, -1):
@@ -129,9 +130,11 @@ class StrokeDetector:
                     # Trim the history to remove lift-off artifacts
                     times = times[:i+1]
                     positions = positions[:i+1]
+                    logging.info(f"Trimmed {original_len - len(positions)} points from end of stroke")
                     break
         
         if len(positions) < MIN_STROKE_POINTS:
+            logging.info(f"Not enough points for stroke: {len(positions)} < {MIN_STROKE_POINTS}")
             return False, None
             
         # Calculate total distance and time
@@ -139,6 +142,7 @@ class StrokeDetector:
         total_time = times[-1] - times[0]
         
         if total_time == 0:  # Avoid division by zero
+            logging.info("Zero time duration for stroke")
             return False, None
             
         # Calculate speed in position units per second
@@ -147,13 +151,26 @@ class StrokeDetector:
         # Determine dominant direction using regression
         direction = self.calculate_stroke_direction(positions)
         if not direction:
+            logging.info("Could not determine stroke direction")
             return False, None
             
         # Check if motion is mostly monotonic in the determined direction
         is_monotonic = self.is_mostly_monotonic(positions, direction)
         
+        # Log stroke detection criteria
+        logging.info(f"Stroke check - Distance: {total_distance:.3f}, Speed: {speed:.3f}, Direction: {direction}, Monotonic: {is_monotonic}")
+        
         # Check if stroke criteria are met and enough time has passed since last stroke
         now = time.time()
+        if not (total_distance >= MIN_STROKE_DISTANCE):
+            logging.info(f"Distance too small: {total_distance:.3f} < {MIN_STROKE_DISTANCE}")
+        if not is_monotonic:
+            logging.info("Movement not monotonic enough")
+        if not (speed >= MIN_STROKE_SPEED):
+            logging.info(f"Speed too low: {speed:.3f} < {MIN_STROKE_SPEED}")
+        if not (now - self.last_stroke_time >= STROKE_TIME_WINDOW):
+            logging.info(f"Too soon after last stroke: {now - self.last_stroke_time:.3f}s < {STROKE_TIME_WINDOW}s")
+            
         if (total_distance >= MIN_STROKE_DISTANCE and 
             is_monotonic and 
             speed >= MIN_STROKE_SPEED and
