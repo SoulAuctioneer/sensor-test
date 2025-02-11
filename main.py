@@ -11,6 +11,7 @@ import asyncio
 import logging
 import config
 from sensor import TouchSensor
+from led_manager import AsyncLedManager
 
 # Check if running in virtual environment
 if not hasattr(sys, 'real_prefix') and not sys.base_prefix != sys.prefix:
@@ -117,9 +118,14 @@ async def main():
     print("\nTouch the sensor to see position...\n")
     
     sensor = None
+    led_manager = None
     try:
         sensor = TouchSensor()
         display = Display()
+        
+        # Initialize and start LED manager
+        led_manager = AsyncLedManager()
+        await led_manager.start_rainbow()
         
         # Register callbacks
         sensor.on_touch(display.update_touch)
@@ -139,6 +145,9 @@ async def main():
         if sensor:
             sensor.stop()
             # Give the sensor loop time to clean up
+            await asyncio.sleep(0.1)
+        if led_manager:
+            await led_manager.stop()
             await asyncio.sleep(0.1)
 
 if __name__ == "__main__":
