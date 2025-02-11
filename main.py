@@ -64,13 +64,12 @@ class Display:
     
     def update_position(self, position):
         """Handle position updates"""
-        # if self.is_touching:
-        #     display = get_position_indicator(position)
-        #     if self.stroke_message:
-        #         display = f"{display} {self.stroke_message}"
-        #     self.show_display(display)
+        if self.is_touching:
+            display = get_position_indicator(position)
+            if self.stroke_message:
+                display = f"{display} {self.stroke_message}"
+            self.show_display(display)
         #     logging.info(f"Position: {position:.3f}")
-        pass
     
     def update_stroke(self, direction):
         """Handle stroke detection"""
@@ -89,6 +88,7 @@ async def main():
     print("Left" + " " * (config.POSITION_WIDTH - 2) + "Right")
     print("\nTouch the sensor to see position...\n")
     
+    sensor = None
     try:
         sensor = TouchSensor()
         display = Display()
@@ -104,10 +104,17 @@ async def main():
     except KeyboardInterrupt:
         print("\nTest stopped by user")
         logging.info("Test stopped by user")
-        sensor.stop()
     except Exception as e:
         logging.error(f"Unexpected error: {str(e)}")
-        sensor.stop()
+    finally:
+        if sensor:
+            sensor.stop()
+            # Give the sensor loop time to clean up
+            await asyncio.sleep(0.1)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        # This catches Ctrl+C at the top level
+        pass 

@@ -304,38 +304,43 @@ class TouchSensor:
         self.running = True
         interval = 1.0 / sample_rate_hz
         
-        while self.running:
-            try:
-                value = self.chan.value
-                was_touching = self.touch_state.is_touching
-                is_touching = self.touch_state.update(value)
-                
-                # Notify touch state changes
-                if is_touching != was_touching:
-                    for callback in self.touch_callbacks:
-                        callback(is_touching)
-                
-                # Process point and check for strokes
-                stroke_detected, direction = self.stroke_detector.add_point(value, is_touching)
-                
-                if is_touching:
-                    # Calculate normalized position
-                    position = ((value - config.LEFT_MIN) / (config.RIGHT_MAX - config.LEFT_MIN))
-                    position = max(0, min(position, 1.0))
+        try:
+            while self.running:
+                try:
+                    value = self.chan.value
+                    was_touching = self.touch_state.is_touching
+                    is_touching = self.touch_state.update(value)
                     
-                    # Notify position updates
-                    for callback in self.position_callbacks:
-                        callback(position)
+                    # Notify touch state changes
+                    if is_touching != was_touching:
+                        for callback in self.touch_callbacks:
+                            callback(is_touching)
+                    
+                    # Process point and check for strokes
+                    stroke_detected, direction = self.stroke_detector.add_point(value, is_touching)
+                    
+                    if is_touching:
+                        # Calculate normalized position
+                        position = ((value - config.LEFT_MIN) / (config.RIGHT_MAX - config.LEFT_MIN))
+                        position = max(0, min(position, 1.0))
+                        
+                        # Notify position updates
+                        for callback in self.position_callbacks:
+                            callback(position)
+                    
+                    if stroke_detected:
+                        # Notify stroke detection
+                        for callback in self.stroke_callbacks:
+                            callback(direction)
+                    
+                except Exception as e:
+                    logging.error(f"Error reading sensor: {str(e)}")
                 
-                if stroke_detected:
-                    # Notify stroke detection
-                    for callback in self.stroke_callbacks:
-                        callback(direction)
-                
-            except Exception as e:
-                logging.error(f"Error reading sensor: {str(e)}")
-            
-            await asyncio.sleep(interval)
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            logging.info("Sensor loop cancelled")
+        finally:
+            self.running = False
     
     def stop(self):
         """Stop the sensor reading loop"""
