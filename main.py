@@ -33,6 +33,16 @@ logging.basicConfig(
     ]
 )
 
+# Global calibration values
+BASELINE_THRESHOLD = 5000
+calibration_data = {
+    'max_value': float('-inf'),
+    'min_value': float('inf'),
+    'max_voltage': float('-inf'),
+    'min_voltage': float('inf'),
+    'is_calibrating': False
+}
+
 def setup_adc():
     """Initialize the ADC connection
     
@@ -65,6 +75,40 @@ def read_sensor(chan):
         logging.error(f"Error reading sensor: {str(e)}")
         return None, None
 
+def update_calibration(value, voltage):
+    """Update calibration values when sensor reading is above baseline
+    
+    Args:
+        value (int): Raw sensor value
+        voltage (float): Voltage reading from sensor
+        
+    Returns:
+        bool: True if calibration values were updated
+    """
+    if value <= BASELINE_THRESHOLD:
+        if calibration_data['is_calibrating']:
+            logging.info("Sensor returned below baseline. Calibration values:")
+            logging.info(f"Max Value: {calibration_data['max_value']}, Max Voltage: {calibration_data['max_voltage']:.6f}V")
+            logging.info(f"Min Value: {calibration_data['min_value']}, Min Voltage: {calibration_data['min_voltage']:.6f}V")
+            calibration_data['is_calibrating'] = False
+        return False
+    
+    # Start calibration when we go above threshold
+    if not calibration_data['is_calibrating']:
+        logging.info("Sensor above baseline - starting calibration")
+        calibration_data['is_calibrating'] = True
+        
+    # Update max/min values
+    if value > calibration_data['max_value']:
+        calibration_data['max_value'] = value
+        calibration_data['max_voltage'] = voltage
+        
+    if value < calibration_data['min_value']:
+        calibration_data['min_value'] = value
+        calibration_data['min_voltage'] = voltage
+        
+    return True
+
 def main():
     """Main function to continuously read and log sensor data"""
     logging.info("Starting ADC sensor test...")
@@ -76,13 +120,18 @@ def main():
         ads.gain = 1
         
         logging.info("ADC initialized successfully")
+        logging.info(f"Baseline threshold set to: {BASELINE_THRESHOLD}")
         logging.info("Reading sensor data...")
         
         while True:
             voltage, value = read_sensor(chan)
             
             if voltage is not None:
-                logging.info(f"Voltage: {voltage:.6f} V, Value: {value}")
+                is_calibrating = update_calibration(value, voltage)
+                if is_calibrating:
+                    logging.info(f"Calibrating - Current Value: {value}, Voltage: {voltage:.6f}V")
+                else:
+                    logging.info(f"Voltage: {voltage:.6f} V, Value: {value}")
             
             time.sleep(0.01)  # Adjust sampling rate as needed
             
