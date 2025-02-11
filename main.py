@@ -64,12 +64,13 @@ class Display:
     
     def update_position(self, position):
         """Handle position updates"""
-        if self.is_touching:
-            display = get_position_indicator(position)
-            if self.stroke_message:
-                display = f"{display} {self.stroke_message}"
-            self.show_display(display)
-            logging.info(f"Position: {position:.3f}")
+        # if self.is_touching:
+        #     display = get_position_indicator(position)
+        #     if self.stroke_message:
+        #         display = f"{display} {self.stroke_message}"
+        #     self.show_display(display)
+        #     logging.info(f"Position: {position:.3f}")
+        pass
     
     def update_stroke(self, direction):
         """Handle stroke detection"""
