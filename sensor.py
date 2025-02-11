@@ -115,7 +115,7 @@ class StrokeDetector:
             return False, None
             
         # Check if motion is mostly monotonic in the determined direction
-        is_monotonic = self.is_mostly_monotonic(positions, direction)
+        is_monotonic = self.is_mostly_monotonic(positions, times, direction)
         
         # Log all stroke metrics at once
         logging.info(f"Stroke metrics - Distance: {total_distance:.3f}, Speed: {speed:.3f}, Direction: {direction}, Monotonic: {is_monotonic}")
@@ -166,36 +166,41 @@ class StrokeDetector:
         slope = numerator / denominator
         return "right" if slope > 0 else "left"
     
-    def is_mostly_monotonic(self, positions, direction):
+    def is_mostly_monotonic(self, positions, times, direction):
         """Check if movement is mostly monotonic with some tolerance for reversals
         
         Args:
             positions: List of position values
+            times: List of timestamps
             direction: Expected direction ("right" or "left")
             
         Returns:
             bool: True if movement is mostly monotonic
         """
-        reversals = 0
+        if len(positions) < 2:
+            return True
+            
         expected_sign = 1 if direction == "right" else -1
+        total_time = times[-1] - times[0]
+        reversal_time = 0  # Total time spent in reversal
         
         for i in range(1, len(positions)):
             diff = positions[i] - positions[i-1]
-            # Only count significant reversals
             if abs(diff) > config.DIRECTION_REVERSAL_TOLERANCE:
                 if (diff * expected_sign) < 0:
-                    reversals += 1
+                    # Add the time spent in this reversal
+                    reversal_time += times[i] - times[i-1]
         
-        # Allow some reversals but ensure overall motion is in correct direction
-        return reversals <= len(positions) // 4
+        # Allow up to 25% of total time to be spent in reversals
+        return reversal_time <= total_time * 0.25
 
 class TouchState:
     """Class to track touch state with hysteresis"""
     def __init__(self):
         self.is_touching = False
         self.last_value = 0
-        self.stable_count = 0
-    
+        self.stable_start = 0  # Time when stable count started
+        
     def update(self, value):
         """Update touch state with hysteresis to prevent rapid switching
         
@@ -205,23 +210,25 @@ class TouchState:
         Returns:
             bool: True if touching, False if not
         """
+        now = time.time()
+        
         # Check if value has changed significantly from last reading
         if value < config.NO_TOUCH_THRESHOLD:
-            self.stable_count += 1
+            if self.last_value >= config.NO_TOUCH_THRESHOLD:
+                self.stable_start = now
         else:
-            self.stable_count = 0
-        
+            self.stable_start = now
+            
         self.last_value = value
         
         # Update touch state with hysteresis
         if not self.is_touching:
             if value >= config.NO_TOUCH_THRESHOLD:
                 self.is_touching = True
-                self.stable_count = 0
         else:
-            if value < config.NO_TOUCH_THRESHOLD and self.stable_count >= 2:
+            # Use time-based stability check (20ms) instead of sample count
+            if value < config.NO_TOUCH_THRESHOLD and (now - self.stable_start) >= 0.02:
                 self.is_touching = False
-                self.stable_count = 0
         
         return self.is_touching
 
