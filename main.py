@@ -37,7 +37,46 @@ logging.basicConfig(
 LEFT_MAX = 17625   # Maximum value (far left)
 RIGHT_MIN = 6000   # Minimum value (far right)
 POSITION_WIDTH = 40  # Width of the visual indicator in characters
-NO_TOUCH_THRESHOLD = 5000  # Values below this indicate no touch
+
+# Touch detection thresholds
+NO_TOUCH_THRESHOLD = 5500  # Values below this indicate no touch
+NOISE_WINDOW = 50        # Ignore value changes smaller than this when not touching
+
+class TouchState:
+    """Class to track touch state with hysteresis"""
+    def __init__(self):
+        self.is_touching = False
+        self.last_value = 0
+        self.stable_count = 0
+    
+    def update(self, value):
+        """Update touch state with hysteresis to prevent rapid switching
+        
+        Args:
+            value (int): Current sensor value
+            
+        Returns:
+            bool: True if touching, False if not
+        """
+        # Check if value has changed significantly from last reading
+        if abs(value - self.last_value) < NOISE_WINDOW and value < NO_TOUCH_THRESHOLD:
+            self.stable_count += 1
+        else:
+            self.stable_count = 0
+        
+        self.last_value = value
+        
+        # Update touch state with hysteresis
+        if not self.is_touching:
+            if value >= NO_TOUCH_THRESHOLD:
+                self.is_touching = True
+                self.stable_count = 0
+        else:
+            if value < NO_TOUCH_THRESHOLD and self.stable_count >= 3:
+                self.is_touching = False
+                self.stable_count = 0
+        
+        return self.is_touching
 
 def setup_adc():
     """Initialize the ADC connection
@@ -71,17 +110,19 @@ def read_sensor(chan):
         logging.error(f"Error reading sensor: {str(e)}")
         return None, None
 
-def get_position_indicator(value):
+def get_position_indicator(value, touch_state):
     """Convert sensor value to a visual position indicator
     
     Args:
         value (int): Raw sensor value
+        touch_state (TouchState): Current touch state tracker
         
     Returns:
         tuple: (str: ASCII visualization of touch position, bool: is_touching)
     """
-    # Check if sensor is being touched
-    if value < NO_TOUCH_THRESHOLD or value > LEFT_MAX + 1000:
+    is_touching = touch_state.update(value)
+    
+    if not is_touching:
         # Show empty bar when not touched
         return f"[{'─' * POSITION_WIDTH}] (no touch)", False
     
@@ -116,11 +157,13 @@ def main():
         print("\nTouch the sensor to see position...\n")
         
         last_display = ""
+        touch_state = TouchState()
+        
         while True:
             voltage, value = read_sensor(chan)
             
             if voltage is not None:
-                display, is_touching = get_position_indicator(value)
+                display, is_touching = get_position_indicator(value, touch_state)
                 # Only update display if position changed
                 if display != last_display:
                     print(f"\r{display}", end='', flush=True)
