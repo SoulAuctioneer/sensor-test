@@ -12,12 +12,15 @@ import os
 # Check if running in virtual environment
 if not hasattr(sys, 'real_prefix') and not sys.base_prefix != sys.prefix:
     print("Error: This script should be run within the virtual environment.")
-    print("Please run 'source ~/activate_adc.sh' first")
+    print("Please run './run.sh'")
     sys.exit(1)
 
 import time
 import board
 import busio
+# Create the I2C bus
+i2c = busio.I2C(board.SCL, board.SDA)
+
 import adafruit_ads1x15.ads1115 as ADS  # Change to ads1015 if using ADS1015
 from adafruit_ads1x15.analog_in import AnalogIn
 import logging
@@ -34,13 +37,16 @@ logging.basicConfig(
 )
 
 def setup_adc():
-    """Initialize the ADC connection"""
+    """Initialize the ADC connection
+    
+    Uses hardware I2C port (1, 3, 2) and default I2C address 0x48 for ADS1115
+    """
     try:
-        # Create the I2C bus
-        i2c = busio.I2C(board.SCL, board.SDA)
         
         # Create the ADC object using the I2C bus
         ads = ADS.ADS1115(i2c)  # Change to ADS1015 if using that model
+        # TODO: We want to enable continuous mode, but we need to know where to import Mode from
+        # ads.mode = Mode.CONTINUOUS
         
         # Create single-ended input on channel 0
         chan = AnalogIn(ads, ADS.P0)
