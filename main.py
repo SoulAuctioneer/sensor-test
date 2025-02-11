@@ -56,6 +56,7 @@ class StrokeDetector:
         self.last_stroke_time = 0
         self.was_touching = False  # Track previous touch state
         self.pending_stroke = None  # Store detected stroke until next touch
+        self.touch_start_time = None  # Track when the current touch started
         
     def add_point(self, value, is_touching):
         """Add a touch point to history and check for stroke on release
@@ -67,6 +68,8 @@ class StrokeDetector:
         Returns:
             tuple: (bool: stroke detected, str: stroke direction if detected) or (False, None)
         """
+        now = time.time()
+        
         # Handle touch state transition
         if is_touching != self.was_touching:
             if self.was_touching and not is_touching:  # Finger lifted
@@ -74,6 +77,7 @@ class StrokeDetector:
                 if len(self.touch_history) >= MIN_STROKE_POINTS:
                     self.pending_stroke = self._check_stroke()
             else:  # New touch started
+                self.touch_start_time = now
                 self.pending_stroke = None
             
             self.touch_history = []
@@ -95,12 +99,7 @@ class StrokeDetector:
         position = max(0, min(position, 1.0))  # Clamp to valid range
         
         # Add point with timestamp
-        now = time.time()
         self.touch_history.append((now, position))
-        
-        # Remove old points outside time window
-        cutoff_time = now - STROKE_TIME_WINDOW
-        self.touch_history = [(t, p) for t, p in self.touch_history if t >= cutoff_time]
         
         return False, None
     
@@ -115,6 +114,26 @@ class StrokeDetector:
         times = [t for t, _ in sorted_history]
         positions = [p for _, p in sorted_history]
         
+        # Trim inconsistent readings at the end (lift-off artifacts)
+        if len(positions) >= 3:
+            # Look for sudden direction changes or large jumps at the end
+            for i in range(len(positions)-2, 0, -1):
+                # Calculate differences between consecutive points
+                diff1 = positions[i] - positions[i-1]  # Direction of movement
+                diff2 = positions[i+1] - positions[i]  # Direction of next movement
+                
+                # If direction suddenly changes significantly or there's a large jump
+                if (abs(diff2) > 0.2 or  # Large position jump (20% of sensor range)
+                    (abs(diff1) > 0.01 and abs(diff2) > 0.01 and  # Both movements are significant
+                     diff1 * diff2 < 0)):  # Direction changed
+                    # Trim the history to remove lift-off artifacts
+                    times = times[:i+1]
+                    positions = positions[:i+1]
+                    break
+        
+        if len(positions) < MIN_STROKE_POINTS:
+            return False, None
+            
         # Calculate total distance and time
         total_distance = abs(positions[-1] - positions[0])
         total_time = times[-1] - times[0]
@@ -133,7 +152,7 @@ class StrokeDetector:
         # Check if motion is mostly monotonic in the determined direction
         is_monotonic = self.is_mostly_monotonic(positions, direction)
         
-        # Check if stroke criteria are met
+        # Check if stroke criteria are met and enough time has passed since last stroke
         now = time.time()
         if (total_distance >= MIN_STROKE_DISTANCE and 
             is_monotonic and 
