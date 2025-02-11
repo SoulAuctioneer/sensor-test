@@ -2,8 +2,8 @@
 
 """
 ADC Sensor Test Script
-Reads analog data from a sensor connected to channel A0 of ADS1115/ADS1015 ADC
-and logs the readings to a file.
+Reads analog data from a linear softpot touch sensor connected to channel A0 of ADS1115/ADS1015 ADC
+and displays a visual indicator of touch position.
 """
 
 import sys
@@ -18,7 +18,7 @@ if not hasattr(sys, 'real_prefix') and not sys.base_prefix != sys.prefix:
 import time
 import board
 import busio
-import adafruit_ads1x15.ads1115 as ADS  # Change to ads1015 if using ADS1015
+import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
 import logging
 from datetime import datetime
@@ -33,15 +33,11 @@ logging.basicConfig(
     ]
 )
 
-# Global calibration values
-BASELINE_THRESHOLD = 6000
-calibration_data = {
-    'max_value': float('-inf'),
-    'min_value': float('inf'),
-    'max_voltage': float('-inf'),
-    'min_voltage': float('inf'),
-    'is_calibrating': False
-}
+# Softpot calibration values
+LEFT_MAX = 17625   # Maximum value (far left)
+RIGHT_MIN = 6000   # Minimum value (far right)
+POSITION_WIDTH = 40  # Width of the visual indicator in characters
+NO_TOUCH_THRESHOLD = 5000  # Values below this indicate no touch
 
 def setup_adc():
     """Initialize the ADC connection
@@ -69,73 +65,75 @@ def read_sensor(chan):
     """Read voltage and raw values from the ADC channel"""
     try:
         voltage = chan.voltage
-        raw = chan.value
-        return voltage, raw
+        value = chan.value
+        return voltage, value
     except Exception as e:
         logging.error(f"Error reading sensor: {str(e)}")
         return None, None
 
-def update_calibration(value, voltage):
-    """Update calibration values when sensor reading is above baseline
+def get_position_indicator(value):
+    """Convert sensor value to a visual position indicator
     
     Args:
         value (int): Raw sensor value
-        voltage (float): Voltage reading from sensor
         
     Returns:
-        bool: True if calibration values were updated
+        tuple: (str: ASCII visualization of touch position, bool: is_touching)
     """
-    if value <= BASELINE_THRESHOLD:
-        if calibration_data['is_calibrating']:
-            logging.info("Sensor returned below baseline. Calibration values:")
-            logging.info(f"Max Value: {calibration_data['max_value']}, Max Voltage: {calibration_data['max_voltage']:.6f}V")
-            logging.info(f"Min Value: {calibration_data['min_value']}, Min Voltage: {calibration_data['min_voltage']:.6f}V")
-            calibration_data['is_calibrating'] = False
-        return False
+    # Check if sensor is being touched
+    if value < NO_TOUCH_THRESHOLD or value > LEFT_MAX + 1000:
+        # Show empty bar when not touched
+        return f"[{'─' * POSITION_WIDTH}] (no touch)", False
     
-    # Start calibration when we go above threshold
-    if not calibration_data['is_calibrating']:
-        logging.info("Sensor above baseline - starting calibration")
-        calibration_data['is_calibrating'] = True
+    # Handle values outside calibrated range but still indicating touch
+    if value > LEFT_MAX:
+        value = LEFT_MAX
+    elif value < RIGHT_MIN:
+        value = RIGHT_MIN
         
-    # Update max/min values
-    if value > calibration_data['max_value']:
-        calibration_data['max_value'] = value
-        calibration_data['max_voltage'] = voltage
-        
-    if value < calibration_data['min_value']:
-        calibration_data['min_value'] = value
-        calibration_data['min_voltage'] = voltage
-        
-    return True
+    # Calculate position as percentage (0 to 1) where 0 is right and 1 is left
+    position = (value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN)
+    
+    # Convert to position in the display width
+    pos = int(position * POSITION_WIDTH)
+    
+    # Create the visual indicator
+    indicator = ['─'] * POSITION_WIDTH
+    indicator[pos] = '●'
+    
+    return f"[{''.join(indicator)}]", True
 
 def main():
-    """Main function to continuously read and log sensor data"""
-    logging.info("Starting ADC sensor test...")
+    """Main function to continuously read and display touch position"""
+    print("\nLinear Softpot Touch Sensor")
+    print("Left" + " " * (POSITION_WIDTH - 2) + "Right")
     
     try:
         ads, chan = setup_adc()
-        
-        # Set the gain (optional, default is 1)
         ads.gain = 1
         
         logging.info("ADC initialized successfully")
-        logging.info(f"Baseline threshold set to: {BASELINE_THRESHOLD}")
-        logging.info("Reading sensor data...")
+        print("\nTouch the sensor to see position...\n")
         
+        last_display = ""
         while True:
             voltage, value = read_sensor(chan)
             
             if voltage is not None:
-                is_calibrating = update_calibration(value, voltage)
-                if is_calibrating:
-                    logging.info(f"Calibrating - Current Value: {value}, Voltage: {voltage:.6f}V")
-                else:
-                    logging.info(f"Voltage: {voltage:.6f} V, Value: {value}")
+                display, is_touching = get_position_indicator(value)
+                # Only update display if position changed
+                if display != last_display:
+                    print(f"\r{display}", end='', flush=True)
+                    last_display = display
+                    if is_touching:
+                        logging.info(f"Position: {value}")
+                    else:
+                        logging.info("No touch detected")
             
             time.sleep(0.01)  # Adjust sampling rate as needed
             
     except KeyboardInterrupt:
+        print("\nTest stopped by user")
         logging.info("Test stopped by user")
     except Exception as e:
         logging.error(f"Unexpected error: {str(e)}")
