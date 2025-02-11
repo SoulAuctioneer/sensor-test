@@ -4,6 +4,15 @@
 Simple test script for NeoPixel LEDs.
 Tests basic LED functionality with different patterns.
 Uses rpi_ws281x library for Raspberry Pi compatibility.
+
+IMPORTANT SETUP REQUIREMENTS:
+1. NeoPixels must be connected to GPIO18 (default), GPIO10, GPIO12, or GPIO21
+2. Level shifting is required from Pi's 3.3V to NeoPixel's 5V:
+   - Either use a 74AHCT125 level shifter chip (recommended)
+   - Or use a 1N4001 diode (for small number of LEDs)
+3. Audio must be disabled if using GPIO18. Edit /boot/config.txt:
+   - Change "dtparam=audio=on" to "dtparam=audio=off"
+   - Reboot the Pi after making this change
 """
 
 import time
@@ -18,7 +27,7 @@ logging.basicConfig(
 
 # LED Configuration
 LED_COUNT = 24        # Number of LED pixels
-LED_PIN = 10         # GPIO pin connected to the pixels (must support PWM)
+LED_PIN = 18         # GPIO18 is the standard pin for NeoPixels
 LED_FREQ_HZ = 800000 # LED signal frequency in hertz (usually 800khz)
 LED_DMA = 10         # DMA channel to use for generating signal
 LED_BRIGHTNESS = 255 # Set to 0 for darkest and 255 for brightest
