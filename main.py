@@ -276,8 +276,8 @@ def get_position_indicator(value, touch_state):
     """
     is_touching = touch_state.update(value)
     
-    if not is_touching:
-        # Show empty bar when not touched
+    # Only show position if actually touching and value is above threshold
+    if not is_touching or value < NO_TOUCH_THRESHOLD:
         return f"[{'─' * POSITION_WIDTH}] (no touch)", False
     
     # Handle values outside calibrated range but still indicating touch
@@ -331,7 +331,8 @@ def main():
                 if display != last_display:
                     print(f"\r{display}", end='', flush=True)
                     last_display = display
-                    if is_touching:
+                    # Log position only if actually touching, otherwise log no touch
+                    if is_touching and value >= NO_TOUCH_THRESHOLD:
                         logging.info(f"Position: {value}")
                     else:
                         logging.info("No touch detected")
