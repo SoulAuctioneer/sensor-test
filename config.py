@@ -27,7 +27,7 @@ INTENSITY_DISTANCE_FACTOR = 1.0  # Multiplier for distance contribution
 SAMPLE_RATE_HZ = 100  # Default sampling rate in Hz
 
 # LED Configuration
-LED_PIN = 21  # GPIO21 for NeoPixel data (D21) - Using this instead of GPIO18 to keep audio enabled
+LED_PIN = 10  # GPIO10 for NeoPixel data - Using this to keep audio enabled on GPIO18
 LED_COUNT = 24  # Number of NeoPixels in the ring
 LED_BRIGHTNESS = 1.0  # LED brightness (0.0 to 1.0)
 LED_ORDER = "GRB"  # Color order of the LEDs (typically GRB or RGB)

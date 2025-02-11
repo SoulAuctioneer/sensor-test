@@ -5,11 +5,25 @@ echo "Installing system dependencies..."
 sudo apt-get update
 sudo apt-get install -y python3-pip i2c-tools python3-venv python3-full
 
+# Additional dependencies for NeoPixel
+echo "Installing NeoPixel dependencies..."
+sudo apt-get install -y gcc make build-essential python3-dev git scons swig
+
 # Enable I2C interface if not already enabled
 if ! grep -q "^dtparam=i2c_arm=on" /boot/config.txt; then
     echo "Enabling I2C interface..."
     sudo sh -c 'echo "dtparam=i2c_arm=on" >> /boot/config.txt'
 fi
+
+# Enable SPI interface if not already enabled
+if ! grep -q "^dtparam=spi=on" /boot/config.txt; then
+    echo "Enabling SPI interface..."
+    sudo sh -c 'echo "dtparam=spi=on" >> /boot/config.txt'
+fi
+
+# Add current user to gpio and spi groups
+echo "Adding user to required groups..."
+sudo usermod -a -G gpio,spi $USER
 
 # Remove existing virtual environment if it exists
 if [ -d .venv ]; then
@@ -37,4 +51,5 @@ else
 fi
 
 echo "Installation complete! Please reboot your Raspberry Pi."
-echo "After reboot, run './run.sh' to start the test script." 
+echo "After reboot, run './run.sh' to start the test script."
+echo "Note: Connect the NeoPixel data line to GPIO10 to keep audio functionality enabled." 
