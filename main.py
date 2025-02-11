@@ -54,13 +54,25 @@ class StrokeDetector:
     def __init__(self):
         self.touch_history = []  # List of (timestamp, position) tuples
         self.last_stroke_time = 0
+        self.was_touching = False  # Track previous touch state
         
-    def add_point(self, value):
+    def add_point(self, value, is_touching):
         """Add a touch point to history
         
         Args:
             value (int): Raw sensor value
+            is_touching (bool): Current touch state
         """
+        # Clear history if touch state changed
+        if is_touching != self.was_touching:
+            self.touch_history = []
+            self.was_touching = is_touching
+            return
+            
+        # Only add points while touching
+        if not is_touching:
+            return
+            
         # Convert value to normalized position (0 to 1)
         position = 1.0 - ((value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN))
         position = max(0, min(position, 1.0))  # Clamp to valid range
@@ -294,8 +306,8 @@ def main():
                 display, is_touching = get_position_indicator(value, touch_state)
                 
                 # Update stroke detection if touching
+                stroke_detector.add_point(value, is_touching)
                 if is_touching:
-                    stroke_detector.add_point(value)
                     stroke_detected, direction = stroke_detector.detect_stroke()
                     if stroke_detected:
                         logging.info(f"Stroke detected: {direction}")
