@@ -1,2 +1,4 @@
 adafruit-blinka
-adafruit-circuitpython-ads1x15 
+adafruit-circuitpython-ads1x15
+adafruit-circuitpython-neopixel>=6.3.9
+typing-extensions>=4.5.0  # For better type hint support 

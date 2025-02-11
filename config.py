@@ -23,8 +23,14 @@ INTENSITY_DECAY_RATE = 0.03   # Level lost per second
 INTENSITY_SPEED_FACTOR = 2.2  # Higher speeds reduce intensity gain (divisor)
 INTENSITY_DISTANCE_FACTOR = 1.0  # Multiplier for distance contribution
 
-# Sampling configuration
+# Sensor sampling configuration
 SAMPLE_RATE_HZ = 100  # Default sampling rate in Hz
+
+# LED Configuration
+LED_PIN = 21  # GPIO21 for NeoPixel data (D21) - Using this instead of GPIO18 to keep audio enabled
+LED_COUNT = 24  # Number of NeoPixels in the ring
+LED_BRIGHTNESS = 1.0  # LED brightness (0.0 to 1.0)
+LED_ORDER = "GRB"  # Color order of the LEDs (typically GRB or RGB)
 
 # Logging configuration
 LOG_FORMAT = '%(asctime)s - %(message)s'
