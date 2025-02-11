@@ -12,26 +12,21 @@ if ! grep -q "^dtparam=i2c_arm=on" /boot/config.txt; then
 fi
 
 # Remove existing virtual environment if it exists
-if [ -d ~/adc_venv ]; then
+if [ -d .venv ]; then
     echo "Removing existing virtual environment..."
-    rm -rf ~/adc_venv
+    rm -rf .venv
 fi
 
 # Create a virtual environment
 echo "Creating Python virtual environment..."
-python3 -m venv ~/adc_venv
+python3 -m venv .venv
 
-# Create activation script
-echo "Creating activation script..."
-cat > ~/activate_adc.sh << 'EOF'
-#!/bin/bash
-source ~/adc_venv/bin/activate
-EOF
-chmod +x ~/activate_adc.sh
+# Set permissions on run script
+chmod +x ./run.sh
 
 # Source the virtual environment and install packages
 echo "Installing Python dependencies..."
-source ~/adc_venv/bin/activate
+source .venv/bin/activate
 if [ "$VIRTUAL_ENV" != "" ]; then
     pip install --upgrade pip
     pip install adafruit-blinka
@@ -42,4 +37,4 @@ else
 fi
 
 echo "Installation complete! Please reboot your Raspberry Pi."
-echo "After reboot, run 'source ~/activate_adc.sh' before running the test script." 
+echo "After reboot, run './run.sh' to start the test script." 
