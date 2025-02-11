@@ -43,9 +43,11 @@ NO_TOUCH_THRESHOLD = 5500  # Values below this indicate no touch
 NOISE_WINDOW = 50        # Ignore value changes smaller than this when not touching
 
 # Stroke detection parameters
-STROKE_TIME_WINDOW = 1.0  # Time window to detect stroke (seconds)
-MIN_STROKE_DISTANCE = 0.3  # Minimum distance (as percentage) to consider a stroke
-MIN_STROKE_POINTS = 5    # Minimum number of touch points to consider a stroke
+STROKE_TIME_WINDOW = 0.5     # Time window to detect stroke (seconds)
+MIN_STROKE_DISTANCE = 0.3    # Minimum distance (as percentage) to consider a stroke
+MIN_STROKE_POINTS = 5        # Minimum number of touch points to consider a stroke
+MIN_STROKE_SPEED = 0.5       # Minimum speed (position units per second)
+DIRECTION_REVERSAL_TOLERANCE = 0.05  # Tolerance for small direction reversals
 
 class StrokeDetector:
     """Class to detect stroking motions on the touch sensor"""
@@ -71,6 +73,58 @@ class StrokeDetector:
         cutoff_time = now - STROKE_TIME_WINDOW
         self.touch_history = [(t, p) for t, p in self.touch_history if t >= cutoff_time]
     
+    def calculate_stroke_direction(self, positions):
+        """Calculate the dominant direction of movement using linear regression
+        
+        Args:
+            positions: List of position values
+            
+        Returns:
+            str: "right" or "left" based on dominant direction
+        """
+        if len(positions) < 2:
+            return None
+            
+        # Use simple linear regression to find trend
+        x = list(range(len(positions)))
+        y = positions
+        n = len(positions)
+        
+        # Calculate slope using least squares
+        mean_x = sum(x) / n
+        mean_y = sum(y) / n
+        numerator = sum((x[i] - mean_x) * (y[i] - mean_y) for i in range(n))
+        denominator = sum((x[i] - mean_x) ** 2 for i in range(n))
+        
+        if denominator == 0:
+            return None
+            
+        slope = numerator / denominator
+        return "right" if slope > 0 else "left"
+    
+    def is_mostly_monotonic(self, positions, direction):
+        """Check if movement is mostly monotonic with some tolerance for reversals
+        
+        Args:
+            positions: List of position values
+            direction: Expected direction ("right" or "left")
+            
+        Returns:
+            bool: True if movement is mostly monotonic
+        """
+        reversals = 0
+        expected_sign = 1 if direction == "right" else -1
+        
+        for i in range(1, len(positions)):
+            diff = positions[i] - positions[i-1]
+            # Only count significant reversals
+            if abs(diff) > DIRECTION_REVERSAL_TOLERANCE:
+                if (diff * expected_sign) < 0:
+                    reversals += 1
+        
+        # Allow some reversals but ensure overall motion is in correct direction
+        return reversals <= len(positions) // 4
+    
     def detect_stroke(self):
         """Detect if a stroking motion occurred in the recent touch history
         
@@ -80,27 +134,34 @@ class StrokeDetector:
         if len(self.touch_history) < MIN_STROKE_POINTS:
             return False, None
             
-        # Get positions in chronological order
-        positions = [p for _, p in sorted(self.touch_history)]
+        # Get positions and times in chronological order
+        sorted_history = sorted(self.touch_history)
+        times = [t for t, _ in sorted_history]
+        positions = [p for _, p in sorted_history]
         
-        # Calculate total distance moved
+        # Calculate total distance and time
         total_distance = abs(positions[-1] - positions[0])
+        total_time = times[-1] - times[0]
         
-        # Determine if motion was mostly monotonic (in one direction)
-        is_monotonic = True
-        direction = "right" if positions[-1] > positions[0] else "left"
-        for i in range(1, len(positions)):
-            if direction == "right" and positions[i] < positions[i-1]:
-                is_monotonic = False
-                break
-            elif direction == "left" and positions[i] > positions[i-1]:
-                is_monotonic = False
-                break
+        if total_time == 0:  # Avoid division by zero
+            return False, None
+            
+        # Calculate speed in position units per second
+        speed = total_distance / total_time
+        
+        # Determine dominant direction using regression
+        direction = self.calculate_stroke_direction(positions)
+        if not direction:
+            return False, None
+            
+        # Check if motion is mostly monotonic in the determined direction
+        is_monotonic = self.is_mostly_monotonic(positions, direction)
         
         # Check if stroke criteria are met
         now = time.time()
         if (total_distance >= MIN_STROKE_DISTANCE and 
             is_monotonic and 
+            speed >= MIN_STROKE_SPEED and
             now - self.last_stroke_time >= STROKE_TIME_WINDOW):
             self.last_stroke_time = now
             return True, direction
