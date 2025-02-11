@@ -57,6 +57,7 @@ class StrokeDetector:
             
         # Convert value to normalized position (0 to 1)
         position = ((value - config.LEFT_MIN) / (config.RIGHT_MAX - config.LEFT_MIN))
+        logging.debug(f"Normalized position: {position:.3f} from value: {value}")
         position = max(0, min(position, 1.0))  # Clamp to valid range
         
         # Add point with timestamp
@@ -71,8 +72,15 @@ class StrokeDetector:
             tuple: (bool: stroke detected, str: stroke direction if detected)
         """
         # Keep history in chronological order (should already be since we append in order)
-        times = [t for t, p in self.touch_history]
-        positions = [p for t, p in self.touch_history]
+        history = list(self.touch_history)  # Make a copy to avoid modifying original
+        times = []
+        positions = []
+        for t, p in history:
+            times.append(t)
+            positions.append(p)
+            
+        # Log raw positions for debugging
+        logging.info(f"Raw positions: {[f'{p:.3f}' for p in positions]}")
         
         # Trim inconsistent readings at the end (lift-off artifacts)
         original_len = len(positions)
@@ -99,6 +107,7 @@ class StrokeDetector:
             
         # Calculate total distance and time
         total_distance = abs(positions[-1] - positions[0])
+        logging.info(f"First position: {positions[0]:.3f}, Last position: {positions[-1]:.3f}, Distance: {total_distance:.3f}")
         total_time = times[-1] - times[0]
         
         if total_time == 0:  # Avoid division by zero
