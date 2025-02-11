@@ -78,8 +78,9 @@ class StrokeDetector:
         times = []
         positions = []
         for t, p in history:
-            times.append(t)
-            positions.append(p)
+            if p > 0:  # Only keep non-zero positions
+                times.append(t)
+                positions.append(p)
             
         # Log raw positions for debugging
         logging.info(f"Raw positions: {[f'{p:.3f}' for p in positions]}")
