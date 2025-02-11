@@ -132,8 +132,9 @@ def get_position_indicator(value, touch_state):
     elif value < RIGHT_MIN:
         value = RIGHT_MIN
         
-    # Calculate position as percentage (0 to 1) where 0 is right and 1 is left
-    position = (value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN)
+    # Calculate position as percentage (0 to 1) where 0 is left and 1 is right
+    # Note: Reversed from before to match physical sensor orientation
+    position = 1.0 - ((value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN))
     
     # Convert to position in the display width
     pos = int(position * POSITION_WIDTH)
