@@ -42,6 +42,71 @@ POSITION_WIDTH = 40  # Width of the visual indicator in characters
 NO_TOUCH_THRESHOLD = 5500  # Values below this indicate no touch
 NOISE_WINDOW = 50        # Ignore value changes smaller than this when not touching
 
+# Stroke detection parameters
+STROKE_TIME_WINDOW = 1.0  # Time window to detect stroke (seconds)
+MIN_STROKE_DISTANCE = 0.3  # Minimum distance (as percentage) to consider a stroke
+MIN_STROKE_POINTS = 5    # Minimum number of touch points to consider a stroke
+
+class StrokeDetector:
+    """Class to detect stroking motions on the touch sensor"""
+    def __init__(self):
+        self.touch_history = []  # List of (timestamp, position) tuples
+        self.last_stroke_time = 0
+        
+    def add_point(self, value):
+        """Add a touch point to history
+        
+        Args:
+            value (int): Raw sensor value
+        """
+        # Convert value to normalized position (0 to 1)
+        position = 1.0 - ((value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN))
+        position = max(0, min(position, 1.0))  # Clamp to valid range
+        
+        # Add point with timestamp
+        now = time.time()
+        self.touch_history.append((now, position))
+        
+        # Remove old points outside time window
+        cutoff_time = now - STROKE_TIME_WINDOW
+        self.touch_history = [(t, p) for t, p in self.touch_history if t >= cutoff_time]
+    
+    def detect_stroke(self):
+        """Detect if a stroking motion occurred in the recent touch history
+        
+        Returns:
+            tuple: (bool: stroke detected, str: stroke direction if detected)
+        """
+        if len(self.touch_history) < MIN_STROKE_POINTS:
+            return False, None
+            
+        # Get positions in chronological order
+        positions = [p for _, p in sorted(self.touch_history)]
+        
+        # Calculate total distance moved
+        total_distance = abs(positions[-1] - positions[0])
+        
+        # Determine if motion was mostly monotonic (in one direction)
+        is_monotonic = True
+        direction = "right" if positions[-1] > positions[0] else "left"
+        for i in range(1, len(positions)):
+            if direction == "right" and positions[i] < positions[i-1]:
+                is_monotonic = False
+                break
+            elif direction == "left" and positions[i] > positions[i-1]:
+                is_monotonic = False
+                break
+        
+        # Check if stroke criteria are met
+        now = time.time()
+        if (total_distance >= MIN_STROKE_DISTANCE and 
+            is_monotonic and 
+            now - self.last_stroke_time >= STROKE_TIME_WINDOW):
+            self.last_stroke_time = now
+            return True, direction
+            
+        return False, None
+
 class TouchState:
     """Class to track touch state with hysteresis"""
     def __init__(self):
@@ -133,7 +198,6 @@ def get_position_indicator(value, touch_state):
         value = RIGHT_MIN
         
     # Calculate position as percentage (0 to 1) where 0 is left and 1 is right
-    # Note: Reversed from before to match physical sensor orientation
     position = 1.0 - ((value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN))
     
     # Convert to position in the display width (ensure within bounds)
@@ -160,12 +224,22 @@ def main():
         
         last_display = ""
         touch_state = TouchState()
+        stroke_detector = StrokeDetector()
         
         while True:
             voltage, value = read_sensor(chan)
             
             if voltage is not None:
                 display, is_touching = get_position_indicator(value, touch_state)
+                
+                # Update stroke detection if touching
+                if is_touching:
+                    stroke_detector.add_point(value)
+                    stroke_detected, direction = stroke_detector.detect_stroke()
+                    if stroke_detected:
+                        logging.info(f"Stroke detected: {direction}")
+                        display = f"{display} Stroke: {direction}!"
+                
                 # Only update display if position changed
                 if display != last_display:
                     print(f"\r{display}", end='', flush=True)
