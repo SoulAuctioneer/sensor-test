@@ -18,9 +18,6 @@ if not hasattr(sys, 'real_prefix') and not sys.base_prefix != sys.prefix:
 import time
 import board
 import busio
-# Create the I2C bus
-i2c = busio.I2C(board.SCL, board.SDA)
-
 import adafruit_ads1x15.ads1115 as ADS  # Change to ads1015 if using ADS1015
 from adafruit_ads1x15.analog_in import AnalogIn
 import logging
@@ -42,6 +39,8 @@ def setup_adc():
     Uses hardware I2C port (1, 3, 2) and default I2C address 0x48 for ADS1115
     """
     try:
+        # Create the I2C bus
+        i2c = busio.I2C(board.SCL, board.SDA)
         
         # Create the ADC object using the I2C bus
         ads = ADS.ADS1115(i2c)  # Change to ADS1015 if using that model
