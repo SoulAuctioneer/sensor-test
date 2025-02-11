@@ -13,7 +13,7 @@ NOISE_WINDOW = 50        # Ignore value changes smaller than this when not touch
 
 # Stroke detection parameters
 STROKE_TIME_WINDOW = 0.5     # Time window to detect stroke (seconds)
-MIN_STROKE_DISTANCE = 0.25   # Minimum distance (as percentage) to consider a stroke
+MIN_STROKE_DISTANCE = 0.2    # Minimum distance (as percentage) to consider a stroke
 MIN_STROKE_POINTS = 5        # Minimum number of touch points to consider a stroke
 MIN_STROKE_SPEED = 0.3       # Minimum speed (position units per second)
 DIRECTION_REVERSAL_TOLERANCE = 0.05  # Tolerance for small direction reversals
