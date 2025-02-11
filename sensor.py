@@ -79,14 +79,14 @@ class StrokeDetector:
         original_len = len(positions)
         if len(positions) >= 3:
             # Look for sudden direction changes or large jumps at the end
-            for i in range(len(positions)-2, 0, -1):
+            for i in range(len(positions)-2, max(0, len(positions)-10), -1):  # Only check last 10 points
                 # Calculate differences between consecutive points
                 diff1 = positions[i] - positions[i-1]  # Direction of movement
                 diff2 = positions[i+1] - positions[i]  # Direction of next movement
                 
                 # If direction suddenly changes significantly or there's a large jump
-                if (abs(diff2) > 0.2 or  # Large position jump (20% of sensor range)
-                    (abs(diff1) > 0.01 and abs(diff2) > 0.01 and  # Both movements are significant
+                if (abs(diff2) > 0.4 or  # Large position jump (40% of sensor range)
+                    (abs(diff1) > 0.05 and abs(diff2) > 0.05 and  # Both movements are significant (5%)
                      diff1 * diff2 < 0)):  # Direction changed
                     # Trim the history to remove lift-off artifacts
                     times = times[:i+1]
