@@ -21,8 +21,9 @@ fi
 echo "Creating Python virtual environment..."
 python3 -m venv .venv
 
-# Set permissions on run script
+# Set permissions on scripts
 chmod +x ./run.sh
+chmod +x ./reload.sh
 
 # Source the virtual environment and install packages
 echo "Installing Python dependencies..."
