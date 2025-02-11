@@ -54,27 +54,34 @@ class Display:
         self.is_touching = False
         self.stroke_message = None
         self.stroke_message_time = 0
+        self.current_position_display = None  # Store current position display
         
     def update_touch(self, is_touching):
         """Handle touch state changes"""
         self.is_touching = is_touching
         if not is_touching:
+            self.current_position_display = None
             self.show_display(f"[{'─' * config.POSITION_WIDTH}] (no touch)")
             logging.info("No touch detected")
     
     def update_position(self, position):
         """Handle position updates"""
         if self.is_touching:
-            display = get_position_indicator(position)
+            self.current_position_display = get_position_indicator(position)
+            display = self.current_position_display
             if self.stroke_message:
                 display = f"{display} {self.stroke_message}"
             self.show_display(display)
-        #     logging.info(f"Position: {position:.3f}")
     
     def update_stroke(self, direction):
         """Handle stroke detection"""
         self.stroke_message = f"Stroke: {direction}!"
         logging.info(f"Stroke detected: {direction}")
+        # Show stroke message immediately with last known position display
+        if self.current_position_display:
+            self.show_display(f"{self.current_position_display} {self.stroke_message}")
+        else:
+            self.show_display(f"[{'─' * config.POSITION_WIDTH}] {self.stroke_message}")
     
     def show_display(self, display):
         """Update the terminal display if changed"""
