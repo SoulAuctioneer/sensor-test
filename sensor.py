@@ -70,10 +70,9 @@ class StrokeDetector:
         Returns:
             tuple: (bool: stroke detected, str: stroke direction if detected)
         """
-        # Get positions and times in chronological order
-        sorted_history = sorted(self.touch_history)
-        times = [t for t, _ in sorted_history]
-        positions = [p for _, p in sorted_history]
+        # Keep history in chronological order (should already be since we append in order)
+        times = [t for t, _ in self.touch_history]
+        positions = [p for _, p in self.touch_history]
         
         # Trim inconsistent readings at the end (lift-off artifacts)
         original_len = len(positions)
