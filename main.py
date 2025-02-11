@@ -34,7 +34,7 @@ logging.basicConfig(
 )
 
 # Global calibration values
-BASELINE_THRESHOLD = 5000
+BASELINE_THRESHOLD = 6000
 calibration_data = {
     'max_value': float('-inf'),
     'min_value': float('inf'),
