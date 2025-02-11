@@ -13,9 +13,10 @@ try:
     import neopixel
     LEDS_AVAILABLE = True
     logging.info("LED libraries available. Will use LEDs")
-except (ImportError, NotImplementedError):
+except (ImportError, NotImplementedError) as e:
     LEDS_AVAILABLE = False
-    logging.info("LED libraries not available. Won't use LEDs")
+    logging.error(f"LED libraries not available: {str(e)}")
+    logging.info("Won't use LEDs")
 
 from config import LED_PIN, LED_COUNT, LED_BRIGHTNESS, LED_ORDER
 
@@ -35,15 +36,21 @@ class AsyncLedManager:
         
         # Initialize NeoPixel object
         if LEDS_AVAILABLE:
-            pin = getattr(board, f'D{LED_PIN}') if hasattr(board, f'D{LED_PIN}') else LED_PIN
-            self.pixels = neopixel.NeoPixel(
-                pin,
-                LED_COUNT,
-                brightness=self._brightness,
-                auto_write=False,
-                pixel_order=LED_ORDER
-            )
-            logging.info(f"NeoPixel initialized on pin {LED_PIN} with {LED_COUNT} LEDs")
+            try:
+                pin = getattr(board, f'D{LED_PIN}') if hasattr(board, f'D{LED_PIN}') else LED_PIN
+                logging.info(f"Using LED pin: {pin}")
+                self.pixels = neopixel.NeoPixel(
+                    pin,
+                    LED_COUNT,
+                    brightness=self._brightness,
+                    auto_write=False,
+                    pixel_order=LED_ORDER
+                )
+                logging.info(f"NeoPixel initialized successfully on pin {LED_PIN} with {LED_COUNT} LEDs")
+            except Exception as e:
+                logging.error(f"Failed to initialize NeoPixels: {str(e)}")
+                LEDS_AVAILABLE = False
+                logging.info("Falling back to mock pixels")
         else:
             # Mock pixels for non-Raspberry Pi platforms
             class MockPixels:
