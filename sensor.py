@@ -56,7 +56,7 @@ class StrokeDetector:
             return False, None
             
         # Convert value to normalized position (0 to 1)
-        position = ((value - config.RIGHT_MIN) / (config.LEFT_MAX - config.RIGHT_MIN))
+        position = ((value - config.LEFT_MIN) / (config.RIGHT_MAX - config.LEFT_MIN))
         position = max(0, min(position, 1.0))  # Clamp to valid range
         
         # Add point with timestamp

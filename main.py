@@ -39,15 +39,15 @@ def get_position_indicator(value, is_touching):
         str: ASCII visualization of touch position
     """
     # Only show position if actually touching and value is in valid range
-    if not is_touching or value < config.NO_TOUCH_THRESHOLD or (value > config.NO_TOUCH_THRESHOLD and value < config.RIGHT_MIN):
+    if not is_touching or value < config.NO_TOUCH_THRESHOLD or (value > config.NO_TOUCH_THRESHOLD and value < config.LEFT_MIN):
         return f"[{'─' * config.POSITION_WIDTH}] (no touch)"
     
     # Handle values outside calibrated range but still indicating touch
-    if value > config.LEFT_MAX:
-        value = config.LEFT_MAX
+    if value > config.RIGHT_MAX:
+        value = config.RIGHT_MAX
     
     # Calculate position as percentage (0 to 1) where 0 is left and 1 is right
-    position = ((value - config.RIGHT_MIN) / (config.LEFT_MAX - config.RIGHT_MIN))
+    position = ((value - config.LEFT_MIN) / (config.RIGHT_MAX - config.LEFT_MIN))
     
     # Convert to position in the display width (ensure within bounds)
     pos = int(position * (config.POSITION_WIDTH - 1))  # Subtract 1 since positions are 0-based

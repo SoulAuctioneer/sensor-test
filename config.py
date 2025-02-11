@@ -3,8 +3,8 @@ Configuration parameters for the ADC Sensor Test Script
 """
 
 # Softpot calibration values
-LEFT_MAX = 17000   # Maximum value (far left)
-RIGHT_MIN = 8800   # Minimum value (far right)
+LEFT_MIN = 8800   # Minimum value (far left)
+RIGHT_MAX = 17000   # Maximum value (far right)
 POSITION_WIDTH = 40  # Width of the visual indicator in characters
 
 # Touch detection thresholds
