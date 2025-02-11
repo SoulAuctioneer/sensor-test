@@ -86,7 +86,7 @@ def main():
                     print(f"\r{display}", end='', flush=True)
                     last_display = display
                     # Log position only if actually touching and in valid range
-                    if is_touching and value >= config.RIGHT_MIN:
+                    if is_touching and value >= config.LEFT_MIN:
                         logging.info(f"Position: {value}")
                     else:
                         logging.info("No touch detected")
