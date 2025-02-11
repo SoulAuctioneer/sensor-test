@@ -91,7 +91,7 @@ class StrokeDetector:
             return False, None
             
         # Convert value to normalized position (0 to 1)
-        position = 1.0 - ((value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN))
+        position = ((value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN))
         position = max(0, min(position, 1.0))  # Clamp to valid range
         
         # Add point with timestamp
@@ -276,18 +276,16 @@ def get_position_indicator(value, touch_state):
     """
     is_touching = touch_state.update(value)
     
-    # Only show position if actually touching and value is above threshold
-    if not is_touching or value < NO_TOUCH_THRESHOLD:
+    # Only show position if actually touching and value is in valid range
+    if not is_touching or value < NO_TOUCH_THRESHOLD or (value > NO_TOUCH_THRESHOLD and value < RIGHT_MIN):
         return f"[{'─' * POSITION_WIDTH}] (no touch)", False
     
     # Handle values outside calibrated range but still indicating touch
     if value > LEFT_MAX:
         value = LEFT_MAX
-    elif value < RIGHT_MIN:
-        value = RIGHT_MIN
-        
+    
     # Calculate position as percentage (0 to 1) where 0 is left and 1 is right
-    position = 1.0 - ((value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN))
+    position = ((value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN))
     
     # Convert to position in the display width (ensure within bounds)
     pos = int(position * (POSITION_WIDTH - 1))  # Subtract 1 since positions are 0-based
@@ -331,8 +329,8 @@ def main():
                 if display != last_display:
                     print(f"\r{display}", end='', flush=True)
                     last_display = display
-                    # Log position only if actually touching, otherwise log no touch
-                    if is_touching and value >= NO_TOUCH_THRESHOLD:
+                    # Log position only if actually touching and in valid range
+                    if is_touching and value >= RIGHT_MIN:
                         logging.info(f"Position: {value}")
                     else:
                         logging.info("No touch detected")
