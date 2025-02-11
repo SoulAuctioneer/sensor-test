@@ -136,8 +136,9 @@ def get_position_indicator(value, touch_state):
     # Note: Reversed from before to match physical sensor orientation
     position = 1.0 - ((value - RIGHT_MIN) / (LEFT_MAX - RIGHT_MIN))
     
-    # Convert to position in the display width
-    pos = int(position * POSITION_WIDTH)
+    # Convert to position in the display width (ensure within bounds)
+    pos = int(position * (POSITION_WIDTH - 1))  # Subtract 1 since positions are 0-based
+    pos = max(0, min(pos, POSITION_WIDTH - 1))  # Clamp to valid range
     
     # Create the visual indicator
     indicator = ['─'] * POSITION_WIDTH
