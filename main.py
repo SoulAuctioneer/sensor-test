@@ -10,7 +10,7 @@ import sys
 import asyncio
 import logging
 import config
-from sensor import TouchSensor
+from sensor import TouchManager
 # from led_manager import AsyncLedManager
 
 # Check if running in virtual environment

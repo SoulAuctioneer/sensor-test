@@ -12,6 +12,182 @@ import config
 import asyncio
 from typing import Callable, Optional, List
 
+class TouchManager:
+    """Main class for interacting with the touch sensor"""
+    def __init__(self):
+        self.ads, self.chan = self._setup_adc()
+        self.touch_state = TouchState()
+        self.stroke_detector = StrokeDetector()
+        self.running = False
+        self.position_callbacks: List[Callable[[float], None]] = []
+        self.stroke_callbacks: List[Callable[[str], None]] = []
+        self.touch_callbacks: List[Callable[[bool], None]] = []
+        self.intensity_callbacks: List[Callable[[float], None]] = []
+        
+        # Intensity level tracking
+        self.intensity_level = 0.0  # 0.0 to 1.0
+        self.last_intensity_update = time.time()
+        
+    def _setup_adc(self):
+        """Initialize the ADC connection
+        
+        Uses hardware I2C port (1, 3, 2) and default I2C address 0x48 for ADS1115
+        """
+        try:
+            # Create the I2C bus
+            i2c = busio.I2C(board.SCL, board.SDA)
+            
+            # Create the ADC object using the I2C bus
+            ads = ADS.ADS1115(i2c)  # Change to ADS1015 if using that model
+            # TODO: We want to enable continuous mode, but we need to know where to import Mode from
+            # ads.mode = Mode.CONTINUOUS
+            
+            # Create single-ended input on channel 0
+            chan = AnalogIn(ads, ADS.P0)
+            
+            ads.gain = 1
+            return ads, chan
+        except Exception as e:
+            logging.error(f"Failed to initialize ADC: {str(e)}")
+            raise
+            
+    def on_position(self, callback: Callable[[float], None]):
+        """Register callback for position updates
+        
+        Args:
+            callback: Function taking normalized position (0-1) as argument
+        """
+        self.position_callbacks.append(callback)
+        
+    def on_stroke(self, callback: Callable[[str], None]):
+        """Register callback for stroke detection
+        
+        Args:
+            callback: Function taking stroke direction ("left" or "right") as argument
+        """
+        self.stroke_callbacks.append(callback)
+        
+    def on_touch(self, callback: Callable[[bool], None]):
+        """Register callback for touch state changes
+        
+        Args:
+            callback: Function taking touch state (True/False) as argument
+        """
+        self.touch_callbacks.append(callback)
+        
+    def on_intensity(self, callback: Callable[[float], None]):
+        """Register callback for intensity level updates
+        
+        Args:
+            callback: Function taking intensity level (0-1) as argument
+        """
+        self.intensity_callbacks.append(callback)
+        
+    def _update_intensity_level(self):
+        """Update intensity level based on time decay"""
+        now = time.time()
+        elapsed = now - self.last_intensity_update
+        
+        # Apply time-based decay
+        decay = config.INTENSITY_DECAY_RATE * elapsed
+        self.intensity_level = max(0.0, self.intensity_level - decay)
+        
+        self.last_intensity_update = now
+        
+        # Notify callbacks of new intensity level
+        for callback in self.intensity_callbacks:
+            callback(self.intensity_level)
+    
+    def _calculate_intensity_increase(self, distance: float, speed: float) -> float:
+        """Calculate intensity increase based on stroke metrics
+        
+        Args:
+            distance: Total distance of stroke (0-1 range)
+            speed: Speed of stroke (positions per second)
+            
+        Returns:
+            float: Amount to increase intensity (0-1 range)
+        """
+        # Increase is proportional to distance and inversely proportional to speed
+        # Add a small constant (0.1) to speed to prevent division by very small numbers
+        increase = (distance * config.INTENSITY_DISTANCE_FACTOR) / ((speed * config.INTENSITY_SPEED_FACTOR) + 0.1)
+        
+        # Clamp the increase to a reasonable range (0-0.5)
+        return min(0.5, max(0.0, increase))
+    
+    async def start(self, sample_rate_hz: float = config.SAMPLE_RATE_HZ):
+        """Start the sensor reading loop
+        
+        Args:
+            sample_rate_hz: Sampling rate in Hz (defaults to config.SAMPLE_RATE_HZ)
+        """
+        if self.running:
+            return
+            
+        self.running = True
+        interval = 1.0 / sample_rate_hz
+        
+        try:
+            while self.running:
+                try:
+                    value = self.chan.value
+                    was_touching = self.touch_state.is_touching
+                    is_touching = self.touch_state.update(value)
+                    
+                    # Update intensity level
+                    self._update_intensity_level()
+                    
+                    # Notify touch state changes
+                    if is_touching != was_touching:
+                        for callback in self.touch_callbacks:
+                            callback(is_touching)
+                    
+                    # Process point and check for strokes
+                    stroke_detected, direction = self.stroke_detector.add_point(value, is_touching)
+                    
+                    if is_touching:
+                        # Calculate normalized position
+                        position = ((value - config.LEFT_MIN) / (config.RIGHT_MAX - config.LEFT_MIN))
+                        position = max(0, min(position, 1.0))
+                        
+                        # Notify position updates
+                        for callback in self.position_callbacks:
+                            callback(position)
+                    
+                    if stroke_detected:
+                        # Get stroke metrics from detector
+                        times = [t for t, p in self.stroke_detector.touch_history]
+                        positions = [p for t, p in self.stroke_detector.touch_history]
+                        total_distance = abs(positions[-1] - positions[0])
+                        total_time = times[-1] - times[0]
+                        speed = total_distance / total_time if total_time > 0 else 0
+                        
+                        # Calculate and apply intensity increase based on stroke metrics
+                        increase = self._calculate_intensity_increase(total_distance, speed)
+                        self.intensity_level = min(1.0, self.intensity_level + increase)
+                        self._update_intensity_level()
+                        
+                        # Log the intensity calculation
+                        logging.info(f"Intensity increase: {increase:.3f} (distance: {total_distance:.3f}, speed: {speed:.3f})")
+                        
+                        # Notify stroke detection
+                        for callback in self.stroke_callbacks:
+                            callback(direction)
+                    
+                except Exception as e:
+                    logging.error(f"Error reading sensor: {str(e)}")
+                
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            logging.info("Sensor loop cancelled")
+        finally:
+            self.running = False
+    
+    def stop(self):
+        """Stop the sensor reading loop"""
+        self.running = False 
+
+
 class StrokeDetector:
     """Class to detect stroking motions on the touch sensor"""
     def __init__(self):
@@ -234,177 +410,3 @@ class TouchState:
         
         return self.is_touching
 
-class TouchSensor:
-    """Main class for interacting with the touch sensor"""
-    def __init__(self):
-        self.ads, self.chan = self._setup_adc()
-        self.touch_state = TouchState()
-        self.stroke_detector = StrokeDetector()
-        self.running = False
-        self.position_callbacks: List[Callable[[float], None]] = []
-        self.stroke_callbacks: List[Callable[[str], None]] = []
-        self.touch_callbacks: List[Callable[[bool], None]] = []
-        self.intensity_callbacks: List[Callable[[float], None]] = []
-        
-        # Intensity level tracking
-        self.intensity_level = 0.0  # 0.0 to 1.0
-        self.last_intensity_update = time.time()
-        
-    def _setup_adc(self):
-        """Initialize the ADC connection
-        
-        Uses hardware I2C port (1, 3, 2) and default I2C address 0x48 for ADS1115
-        """
-        try:
-            # Create the I2C bus
-            i2c = busio.I2C(board.SCL, board.SDA)
-            
-            # Create the ADC object using the I2C bus
-            ads = ADS.ADS1115(i2c)  # Change to ADS1015 if using that model
-            # TODO: We want to enable continuous mode, but we need to know where to import Mode from
-            # ads.mode = Mode.CONTINUOUS
-            
-            # Create single-ended input on channel 0
-            chan = AnalogIn(ads, ADS.P0)
-            
-            ads.gain = 1
-            return ads, chan
-        except Exception as e:
-            logging.error(f"Failed to initialize ADC: {str(e)}")
-            raise
-            
-    def on_position(self, callback: Callable[[float], None]):
-        """Register callback for position updates
-        
-        Args:
-            callback: Function taking normalized position (0-1) as argument
-        """
-        self.position_callbacks.append(callback)
-        
-    def on_stroke(self, callback: Callable[[str], None]):
-        """Register callback for stroke detection
-        
-        Args:
-            callback: Function taking stroke direction ("left" or "right") as argument
-        """
-        self.stroke_callbacks.append(callback)
-        
-    def on_touch(self, callback: Callable[[bool], None]):
-        """Register callback for touch state changes
-        
-        Args:
-            callback: Function taking touch state (True/False) as argument
-        """
-        self.touch_callbacks.append(callback)
-        
-    def on_intensity(self, callback: Callable[[float], None]):
-        """Register callback for intensity level updates
-        
-        Args:
-            callback: Function taking intensity level (0-1) as argument
-        """
-        self.intensity_callbacks.append(callback)
-        
-    def _update_intensity_level(self):
-        """Update intensity level based on time decay"""
-        now = time.time()
-        elapsed = now - self.last_intensity_update
-        
-        # Apply time-based decay
-        decay = config.INTENSITY_DECAY_RATE * elapsed
-        self.intensity_level = max(0.0, self.intensity_level - decay)
-        
-        self.last_intensity_update = now
-        
-        # Notify callbacks of new intensity level
-        for callback in self.intensity_callbacks:
-            callback(self.intensity_level)
-    
-    def _calculate_intensity_increase(self, distance: float, speed: float) -> float:
-        """Calculate intensity increase based on stroke metrics
-        
-        Args:
-            distance: Total distance of stroke (0-1 range)
-            speed: Speed of stroke (positions per second)
-            
-        Returns:
-            float: Amount to increase intensity (0-1 range)
-        """
-        # Increase is proportional to distance and inversely proportional to speed
-        # Add a small constant (0.1) to speed to prevent division by very small numbers
-        increase = (distance * config.INTENSITY_DISTANCE_FACTOR) / ((speed * config.INTENSITY_SPEED_FACTOR) + 0.1)
-        
-        # Clamp the increase to a reasonable range (0-0.5)
-        return min(0.5, max(0.0, increase))
-    
-    async def start(self, sample_rate_hz: float = config.SAMPLE_RATE_HZ):
-        """Start the sensor reading loop
-        
-        Args:
-            sample_rate_hz: Sampling rate in Hz (defaults to config.SAMPLE_RATE_HZ)
-        """
-        if self.running:
-            return
-            
-        self.running = True
-        interval = 1.0 / sample_rate_hz
-        
-        try:
-            while self.running:
-                try:
-                    value = self.chan.value
-                    was_touching = self.touch_state.is_touching
-                    is_touching = self.touch_state.update(value)
-                    
-                    # Update intensity level
-                    self._update_intensity_level()
-                    
-                    # Notify touch state changes
-                    if is_touching != was_touching:
-                        for callback in self.touch_callbacks:
-                            callback(is_touching)
-                    
-                    # Process point and check for strokes
-                    stroke_detected, direction = self.stroke_detector.add_point(value, is_touching)
-                    
-                    if is_touching:
-                        # Calculate normalized position
-                        position = ((value - config.LEFT_MIN) / (config.RIGHT_MAX - config.LEFT_MIN))
-                        position = max(0, min(position, 1.0))
-                        
-                        # Notify position updates
-                        for callback in self.position_callbacks:
-                            callback(position)
-                    
-                    if stroke_detected:
-                        # Get stroke metrics from detector
-                        times = [t for t, p in self.stroke_detector.touch_history]
-                        positions = [p for t, p in self.stroke_detector.touch_history]
-                        total_distance = abs(positions[-1] - positions[0])
-                        total_time = times[-1] - times[0]
-                        speed = total_distance / total_time if total_time > 0 else 0
-                        
-                        # Calculate and apply intensity increase based on stroke metrics
-                        increase = self._calculate_intensity_increase(total_distance, speed)
-                        self.intensity_level = min(1.0, self.intensity_level + increase)
-                        self._update_intensity_level()
-                        
-                        # Log the intensity calculation
-                        logging.info(f"Intensity increase: {increase:.3f} (distance: {total_distance:.3f}, speed: {speed:.3f})")
-                        
-                        # Notify stroke detection
-                        for callback in self.stroke_callbacks:
-                            callback(direction)
-                    
-                except Exception as e:
-                    logging.error(f"Error reading sensor: {str(e)}")
-                
-                await asyncio.sleep(interval)
-        except asyncio.CancelledError:
-            logging.info("Sensor loop cancelled")
-        finally:
-            self.running = False
-    
-    def stop(self):
-        """Stop the sensor reading loop"""
-        self.running = False 

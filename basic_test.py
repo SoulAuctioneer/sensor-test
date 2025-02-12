@@ -11,6 +11,7 @@ import board
 import busio
 import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
+from adafruit_ads1x15.ads1x15 import Mode
 
 # Check if running in virtual environment
 if not hasattr(sys, 'real_prefix') and not sys.base_prefix != sys.prefix:
@@ -30,6 +31,7 @@ def main():
         # Create ADC object
         ads = ADS.ADS1115(i2c)
         ads.gain = 1
+        ads.mode = Mode.CONTINUOUS
         
         # Create analog input channel
         chan = AnalogIn(ads, ADS.P0)
