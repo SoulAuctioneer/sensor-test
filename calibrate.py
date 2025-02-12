@@ -149,9 +149,9 @@ class SensorCalibrator:
                 if voltage is not None:
                     is_calibrating = self.update_calibration(value, voltage)
                     if is_calibrating:
-                        logging.info(f"Calibrating - Current Value: {value}, Voltage: {voltage:.6f}V", end='\r')
+                        print(f"Calibrating - Current Value: {value}, Voltage: {voltage:.6f}V", end='\r')
                     else:
-                        logging.info(f"Waiting - Value: {value}, Voltage: {voltage:.6f}V", end='\r')
+                        print(f"Waiting - Value: {value}, Voltage: {voltage:.6f}V", end='\r')
                 
                 time.sleep(0.01)
                 
