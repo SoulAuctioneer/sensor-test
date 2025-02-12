@@ -9,5 +9,18 @@ Installation on a Raspberry Pi:
 git clone https://github.com/SoulAuctioneer/sensor-test.git
 cd sensor-test
 chmod +x ./install.sh && ./install.sh
+```
+
+Note: I've found that I need to manually enable SPI in the Raspberry Pi OS:
+```
+sudo raspi-config
+```
+Select "Interfacing Options" -> "SPI" -> "Yes" -> "Finish" -> "Yes" -> "Reboot"
+
+After rebooting, run the script:
+```
+cd sensor-test
 ./run.sh
 ```
+
+To stop the script, press Ctrl+C.
